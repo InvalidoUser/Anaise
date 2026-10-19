@@ -40,10 +40,15 @@ __pycache__/
 *.py[cod]
 dist/
 build/
+bin/
 coverage/
 .next/
 .cache/
 *.log
+*.o
+*.obj
+*.res
+*.exe
 *.sqlite
 *.sqlite3
 *.db
