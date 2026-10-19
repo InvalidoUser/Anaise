@@ -1,0 +1,53 @@
+# Local environment files (including nested and named environments)
+.env
+.env.*
+*.env
+*.env.*
+.envrc
+.direnv/
+# Only these templates may be committed; use placeholders, never real values.
+!.env.example
+!.env.sample
+!.env.template
+
+# Credentials, tokens, certificates, and private keys
+secrets/
+.secret/
+.secrets/
+credentials/
+credentials.json
+credentials.*.json
+service-account*.json
+service_account*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+.npmrc
+.pypirc
+.netrc
+.authinfo
+
+# Dependencies, generated output, caches, and local databases
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+coverage/
+.next/
+.cache/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Machine-specific files
+.DS_Store
+Thumbs.db
