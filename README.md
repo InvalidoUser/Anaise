@@ -1,21 +1,167 @@
 # Anaise
 
 A small black-and-white game library in a native Windows window. Anaise opens
-on a dot-art seraphim startup screen, then a main menu with two rooms: an empty
-library and a pixel paint canvas.
+on a dot-art seraphim startup screen, then a monochrome computer desktop with
+three apps to open: Bethelament, a Painter canvas and Veil, a browser that only
+reaches dead cult pages.
 
 The palette is strictly black and white, the logo is 10x10 pixel art, and
 nothing is written to disk.
+
+## Screenshots
+
+The desktop, captured directly from the app at 1080 x 740:
+
+![Anaise desktop with ring wallpaper, app icons and a Finder window](docs/screenshots/menu.png)
+
+| Startup seraphim | Bethelament |
+| --- | --- |
+| ![Seraphim startup screen and Anaise title](docs/screenshots/splash.png) | ![Bethelament shelves and glowing pilgrim](docs/screenshots/library.png) |
+| **Painter** | **Veil** |
+| ![Painter monochrome canvas and brush controls](docs/screenshots/paint.png) | ![Veil browser opening Welcome to the Game](docs/screenshots/browser.png) |
+
+These are offscreen captures at virtual time `4200` ms. To regenerate them,
+render into `build/readme`, then losslessly compress the PNGs into
+`docs/screenshots`:
+
+```bat
+powershell -ExecutionPolicy Bypass -File tools\headless.ps1 -Screen all -OutDir build\readme
+```
+
+## Text art
+
+The bookshelf logo and the pilgrim's standing sprite use these exact ASCII
+rows in `src/main.cpp`: `#` is a lit pixel and `.` is empty space.
+
+Bookshelf:
+
+```text
+..........
+.##..##..#
+.##..##..#
+.##..##..#
+.##..##..#
+.##..##..#
+.##..##..#
+##########
+..........
+..........
+```
+
+Pilgrim:
+
+```text
+.....####.....
+...########...
+..##########..
+.############.
+.############.
+.####.##.####.
+.############.
+.############.
+..##########..
+....######....
+...########...
+##############
+#.##########.#
+#.##########.#
+#.##########.#
+..##########..
+...###..###...
+...##....##...
+```
+
+<details>
+<summary>Seraphim source art (Unicode Braille)</summary>
+
+The original text from `src/angel_art.h`; the splash turns each raised
+Braille dot into a point of light.
+
+```text
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀⠀⢾⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠀⠀⠀⠀⠀⠀⠀⠿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠇⠀⠀⠀⠀⠀⠀⠀⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠒⠤⠄⠀⡀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠀⠀⠀⠈⠀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡀⠠⠤⠅⠡⡴⡁⣥⠀⠀⢈⠀⠀⠀⠀⠀⠀⠀⠈⠢⠀⠀⠀⡄⠀⠀⠈⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠀⠊⠀⠂⠀⠀⣼⣿⣿⣿⣿⡓⠰⠄⠠⠄⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠀⣶⠾⣭⣥⣿⣿⣷⠀⠀⠁⢄⢀⠀⠀⠀⠀⠀⠀⢱⠀⠀⢣⠀⠀⣒⠁⠀⢀⠀⠀⠀⡰⠁⠀⠀⢀⠠⠁⠀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠀⣰⢛⣿⣿⣿⣿⣿⣔⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠄⣠⣶⢮⢴⣾⣿⣿⣿⣿⣿⠢⠀⠀⠈⠢⠀⠀⠀⢤⠀⠘⠠⢇⠀⠀⠀⠀⠂⠀⠀⠠⠀⠆⣖⡁⠀⢀⠔⠉⠀⠀⠀⠀⠂⠁⠀⠀⠀⠀⠀⠀⠀⢀⢣⠾⢫⠹⣿⣿⣿⣿⣆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣨⣾⡿⡡⢴⣿⣿⣿⣿⡿⣿⣿⡷⠀⠀⠀⠈⢇⠀⠠⠀⠁⠀⠘⠁⠀⠀⠠⠀⢀⠀⠀⠀⠀⠀⠀⠃⠔⠁⠀⠀⢀⠤⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢂⣆⢖⣥⡶⡜⣿⣿⣿⣿⡄⠁⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⠄⣺⣿⣯⠚⣤⡟⢙⣿⣿⣰⣼⣿⣿⡇⠀⠀⠀⠀⠀⠀⠿⣰⠀⡀⠁⠀⡀⡨⢠⣄⠀⡰⠒⠂⠀⠀⠀⠀⠀⠀⣢⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⣴⡿⣧⢏⢺⣿⣿⣿⣿⣷⡀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠠⢈⣺⣿⣿⣷⣵⠏⣀⢪⣿⣿⢸⢼⢸⣿⡇⠀⠀⠀⠀⠀⠀⠀⠁⠀⠐⣀⡈⡨⢘⣛⣤⡤⠃⠲⡥⠆⠀⠀⠀⠠⠞⠓⠀⠀⠀⠀⣀⠀⠄⠀⠀⠀⠀⠀⠀⠈⣼⣿⡽⣫⢯⣿⣿⣿⡿⣿⣿⣧⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⢔⠄⠈⣠⣿⣿⣿⣿⣽⠋⣨⠦⣿⣿⣿⡁⣼⠈⢿⣷⠄⠤⣦⣤⢄⡤⠀⠀⠈⠀⠈⣛⢛⣉⣖⣠⠂⢫⣥⣦⣄⢡⡍⠁⠀⠀⠀⠀⠐⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⢈⡄⣿⣽⣫⣿⣿⣿⣿⣇⡝⢿⣿⢤⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡴⠊⡰⠣⣪⣾⣿⠿⢿⣷⢋⡝⢁⣵⣿⡿⣽⡟⢑⣣⢰⣿⣿⡄⠀⠀⠀⠀⠃⠀⠀⠀⠀⡻⣧⠻⣿⣿⣿⣷⣄⠶⠬⣍⠀⠞⢀⠀⠀⠀⢠⠠⡄⠀⠀⢀⣀⠀⠀⠀⠀⠀⠀⣾⣀⣿⢡⡏⣿⣿⣿⣿⡇⢸⣿⣿⡆⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⢟⢽⣵⣿⣿⡟⢸⡿⠃⢚⣴⡞⣿⠏⡇⡿⢃⢀⢲⣾⣿⡿⢃⠀⠀⠀⠀⠀⠀⢈⠁⠘⡙⠰⠾⠛⣉⠁⠭⠉⠉⠹⠀⡶⡀⠘⢀⠀⠀⠈⠂⠀⠁⠀⠀⠀⠀⠀⠒⠀⢠⣾⡏⣼⣿⡸⠀⣿⣿⣿⣿⣿⠸⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣰⣷⣽⣿⣿⣿⠟⢡⣌⣵⣿⣿⣿⣇⡏⡄⣷⠃⠾⢙⡤⡿⣿⡓⠀⠀⠀⠁⠀⠃⠀⠀⢠⠘⠀⢰⣶⣾⣿⠐⣿⣿⣂⠂⢩⣿⠌⠄⠺⠥⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⡞⣿⣿⣷⣦⡛⢛⣿⣿⣿⢦⢻⣿⣿⣧⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠀⢀⣶⣿⣿⣿⡿⠛⣿⠿⢢⣿⣿⣿⡿⠿⣿⣻⢱⣧⢟⡀⢁⡬⢁⣃⡜⠁⠪⠖⠑⣀⠀⠀⠀⠀⠎⠃⡄⠈⣿⣿⣏⣈⣼⣷⣿⣆⢈⠿⡸⠌⢠⡉⠀⠀⠋⢦⠀⠀⠀⠀⠀⠀⠀⠀⣰⣿⣿⢿⣿⣿⣿⣿⡏⢻⣿⣿⢸⡞⣿⣿⣿⡆⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠘⠀⣰⣿⣿⣿⠟⢁⣤⡾⢃⣴⣶⠋⣿⡟⡀⣸⢁⣣⢾⡏⣲⢨⣼⡿⠟⠉⡊⠁⢢⠦⠀⠀⢀⠀⠀⠀⠐⣀⣶⡀⠘⢟⡥⣤⣝⣿⣿⠃⠀⣿⡖⠇⠁⢠⠁⠀⠀⠀⠀⠀⠀⢀⠀⠀⢢⢺⣿⣫⣿⢸⠃⣿⠃⣿⡇⣼⠏⣿⡸⣿⢸⣿⣿⣷⡀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠔⠁⢠⣾⣿⣿⡿⡣⣨⡾⡋⡡⢫⢎⡏⢶⣿⡽⡱⣣⣿⡟⣱⠀⣿⢸⡇⡇⣬⡖⡅⠐⠋⠀⠂⠆⠠⠁⠀⠀⠂⠡⠋⢧⠀⠈⠛⠛⠉⠉⠁⠀⠤⡇⣻⡜⢁⠹⡉⠀⠠⠀⠀⠀⠀⠀⡀⢡⣶⡟⡡⢹⠇⠞⠈⡿⠀⠛⠁⠘⠠⢻⡇⣿⡏⣿⣿⢩⣷⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣿⣿⣿⠋⢠⣾⢟⠅⣞⣱⡇⣼⠇⡾⢈⣭⠶⣿⣿⢸⡏⡖⣿⠟⣥⡇⡿⣱⠓⠃⢉⠀⠐⠚⢄⡀⠀⠀⠀⠀⢁⡀⠀⠀⠀⢴⢀⣤⠀⢐⣔⡝⠘⠅⠂⠄⣡⣥⡄⠐⢆⠀⠠⢊⠀⠋⡜⣱⡫⠛⣂⣰⣦⡥⠠⣾⡩⢰⠀⣸⣧⢻⡗⣿⣿⡎⣿⣇⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⠀⢤⣾⣿⣿⠟⢁⣵⣿⠃⣪⣾⠛⡿⢠⡿⡸⣑⣿⠃⣣⡿⣣⣿⠘⣾⠟⣾⣿⢸⠱⢁⡕⢃⠂⡑⠃⠀⠈⠈⠓⢀⠠⠞⢈⡘⠠⠀⠀⣚⡎⣿⡳⣸⡜⣎⣠⢃⠂⢠⠑⣹⣿⢈⢀⡥⢞⠁⢋⠚⠛⡌⣱⡞⣿⣿⣿⠇⣀⣷⣇⡇⠀⢨⡄⢼⡇⣿⣿⣇⢿⣿⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠋⣴⣿⣿⠟⢅⣴⣿⡟⣡⣾⡿⠃⡪⡐⣼⠰⣶⡷⣶⢨⢹⡿⣸⣿⣾⢇⡇⣿⡟⡀⢞⢈⣶⣃⡾⢡⡄⠀⠂⠀⠀⡤⠺⠾⣿⣷⠾⣯⣵⣾⡿⠜⠷⢎⢫⡏⠎⠀⣺⣆⠲⠄⠂⣉⡀⠰⠿⢗⡳⠶⠔⠾⠿⣧⣿⣿⠏⢰⣸⣼⢙⠀⠐⣾⠂⣼⢳⣿⣿⣿⣻⣿⡇⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⢃⣾⣿⡟⠋⣠⡾⣉⡍⣼⣿⣯⢠⢆⡱⣱⡿⣱⡱⣸⢃⣿⠬⢡⣿⣿⡿⢘⣼⡿⢐⡌⢔⡟⣼⣏⣴⡟⠀⡀⠈⢀⠠⠹⣸⣧⡿⢿⡇⢠⣙⠻⣿⣷⢸⡀⠾⠷⠘⢃⢠⣍⠭⣡⡬⠉⣁⠀⠀⠀⠨⡘⢸⣷⣯⣸⠻⣿⢀⡟⢏⣇⡇⠈⣠⣿⠀⣿⣿⣿⣿⣿⣿⢋⢱⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⣰⣿⣿⠿⠀⣾⢏⣾⢏⣾⣿⣿⡏⢸⡄⣱⣿⢳⡵⣱⢏⣾⢡⠂⣽⣿⡿⢡⢸⡟⣠⠟⢨⣾⢣⡎⣿⠛⡐⡼⠁⢠⣾⡟⢣⣟⢙⣷⢠⡃⡌⢻⣧⣿⣿⡞⠡⠼⠃⢃⣼⣯⣦⠜⢈⠔⠼⠃⡀⠸⣕⣀⠈⠸⣿⡇⠛⡄⠁⢹⡇⣼⣸⠇⠄⣿⡇⠁⣿⣾⣿⣿⣧⢻⢸⢸⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣎⣽⠿⣿⡏⣼⡿⣱⠿⣳⣿⣿⡿⠟⢵⣬⢰⣿⡇⠟⣴⢣⠻⢏⣴⣧⡛⣩⣶⣫⡜⠘⡱⢨⣿⢏⡦⣇⡾⣀⡜⢠⠀⠸⣿⠿⡚⠃⢾⣿⡆⣧⢻⣎⠙⢻⣽⣿⣿⣿⠈⣰⣞⢏⡡⢞⣳⡛⠀⠀⣴⣶⣿⡿⡄⠀⢻⡧⠃⣁⡄⣿⡇⡛⣿⠠⢸⣿⠀⠠⣽⢺⣿⣿⡇⣿⠸⢸⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⢡⣾⡟⢸⡿⣸⢟⡼⠃⣼⣿⣿⡿⠁⣿⣷⣭⡬⢭⣶⣿⣶⣿⣿⡿⢋⢿⣿⣿⡟⡤⠀⣾⢃⣚⡡⣿⣷⠉⡚⠀⠀⡄⡄⢐⡉⠑⠀⠹⢹⣿⡿⣨⡀⢻⣦⡁⢝⠻⠿⠁⣸⠹⠃⠈⠁⠦⠭⡄⠀⢰⣿⣿⣿⠂⢰⣆⠘⢁⢀⠈⢁⢹⠃⣸⡿⠀⣿⣿⠘⢸⣿⢹⣿⣿⣯⣿⠁⣾⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⠁⢼⣿⠀⡟⣱⠫⡾⠁⣼⣿⣿⡟⠀⣼⣿⣿⡏⠖⣾⣿⡟⢡⣸⡟⣱⢸⣹⢻⣿⢃⠀⢰⢃⣾⡟⢹⡿⡇⣴⠱⠀⡘⡥⣾⢯⣻⠚⠆⠲⢸⣿⣷⠰⣧⣠⡹⣝⠢⣶⠖⢋⡁⢆⠆⢾⡇⠋⡉⠬⢠⡿⠋⢀⡄⡀⢀⣿⡄⠏⠀⠀⠠⣿⣾⡟⠇⢱⣿⠃⢸⠨⢱⣿⣿⣿⣧⣿⠠⢹⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⠟⣠⠸⢃⣦⣾⠁⠀⢅⣾⣿⣿⡟⣼⡂⢿⣿⡿⢡⡇⣿⣿⠁⣣⢏⣴⡟⣰⡆⣸⠁⠀⠀⢈⡞⢛⡀⠌⠁⢅⡧⡇⠢⡘⣷⣎⠓⢽⣷⠑⠜⠘⣿⣿⡄⠹⠇⠁⣴⣶⣎⢬⠣⣍⠼⢰⡀⢥⣶⡄⠓⠃⢀⣴⢻⠐⡔⠃⢀⠃⠄⠀⠀⡀⠽⡟⢐⠠⢸⡿⠐⡚⢰⣾⣿⣿⣿⢻⣿⡄⢸⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡏⣰⣿⣶⣿⣿⢁⠿⢏⣾⣿⣿⠟⢸⣿⣧⢌⣩⣴⢸⣿⣌⡓⢀⣵⣿⠏⠄⠛⠁⠋⡄⢠⡾⠿⠁⢋⠃⣆⠂⣼⢙⠐⠟⠛⣿⣿⣷⣦⠙⣦⢸⡆⣿⣿⣷⣠⣄⠠⡀⠈⠉⠦⠇⢈⡉⠋⠣⠀⠏⢈⣷⣿⣾⡶⢖⡌⠀⡴⠈⡐⣰⡖⠀⠃⢀⢁⡛⡀⢘⠇⣿⡇⣿⣿⣿⣿⣿⣹⣿⣇⠸⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⡀⡟⢰⣿⣿⣿⣿⠃⣼⠃⣼⢏⢸⣿⢃⣿⣿⢋⣾⣿⣿⠇⣭⡭⢶⣷⣭⣵⡣⠄⢠⡾⡇⢧⡄⠁⠀⠀⠋⠀⠛⠐⣨⡀⠠⣰⣔⠙⢿⢿⡟⠠⣋⢸⡧⠙⠒⣨⡝⢩⣦⠇⠁⣤⠘⢤⡌⠀⢰⠠⠐⡄⠉⠙⠫⡁⠠⠤⠂⢤⠀⣠⢃⢻⠁⠀⠀⢀⡿⡄⠀⣸⢰⣿⠃⣿⣿⣿⣿⣿⣽⣿⣿⠀⡇⠀
+⠀⠀⠀⠀⠀⠀⠀⡆⠈⠀⣿⣿⣿⣿⡏⠀⢇⡿⡇⣸⢸⡇⣸⣿⠇⢸⣿⣿⡇⣾⣿⣇⣾⣿⢿⣿⠇⢀⡎⠀⠁⣾⡇⢀⠀⠀⠈⠀⠀⣀⣾⡇⣸⣿⣿⣿⣿⡆⠀⣷⢱⠉⣿⠆⠀⠀⢹⣇⡆⢁⣾⠸⡀⠀⠉⠇⠁⡇⡆⣶⡿⡇⢀⣷⡶⠿⣆⠹⡆⠁⢸⡀⠀⠁⡇⢹⣷⠇⣶⡿⣸⣿⠀⣿⣿⣿⣿⣿⣾⣿⠀⡆⠇⠀
+⠀⠀⠀⠀⠀⠀⠰⠀⠀⣸⣿⣿⣿⠋⠀⡸⡸⠝⢰⡇⠟⢠⣿⡟⡰⣿⣿⢈⣴⢫⡻⣿⢟⣵⣷⠉⠀⠈⠀⠀⢠⡟⠒⠋⠀⠀⠀⠀⣰⠿⣀⣀⡀⠹⣿⣿⠟⠠⡀⠻⠰⠺⡏⠜⡢⡙⠖⠆⣶⡮⠈⠃⠩⣒⡟⡴⠀⢇⢏⠯⣓⡃⠼⠃⣐⢣⡠⠴⠂⡀⠀⠷⡀⢲⠁⣼⡾⢠⡟⡀⢃⣿⡄⣿⣿⣿⣿⣿⣿⣻⠀⡡⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⡱⣿⣿⡿⠃⣾⣀⠣⣼⣿⡜⢟⡰⣜⠿⢃⣅⣛⣵⡿⢱⡎⡏⣏⡾⠛⢋⠀⠀⠀⠀⠁⡎⠀⠀⠐⠐⡉⠄⠐⢉⢺⣟⡛⢿⣦⣹⡏⢀⠴⡄⢡⠐⠀⢿⣤⠿⠘⠠⢜⠷⠉⠺⠖⠀⠉⠙⣄⣀⠾⣅⡍⠒⠠⠤⠌⠹⣷⣦⠃⠡⠁⠀⠀⢒⡘⠀⢹⠧⣾⣿⠀⣸⣏⢸⣿⣿⣿⣿⣿⣽⣿⠀⢧⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⣼⢳⣿⡿⣡⡺⡋⡋⡆⣾⡿⠙⣿⢏⣶⡊⢹⡿⣁⣭⣶⢸⣳⡇⠋⠀⠀⢈⢰⠃⠀⠀⠘⠁⠀⠀⠀⠀⠀⠀⢄⣤⣟⣿⣏⠀⠘⢓⡵⢃⡆⠇⢿⡄⢮⠤⠃⠔⠋⣠⡄⠄⠀⠀⢠⣁⣀⣉⡀⣤⠆⠐⠘⠋⠱⣶⡉⠓⠈⣿⡄⠀⠀⠀⡈⠠⡇⠀⢀⠀⠻⢠⠚⢻⣽⢺⣿⣿⣿⣿⣿⣿⡇⠆⠸⠀⡄
+⠀⠀⠀⠀⠀⠠⢰⡏⣿⣿⣇⣿⡟⡼⣸⠅⣿⠇⢲⢏⣾⣿⡟⣬⡎⡇⣿⡟⣾⢇⠾⠿⠀⠀⠀⠏⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⣿⣿⣿⣿⣿⡗⡀⢙⣦⠈⡄⠀⠸⣿⣦⣠⢶⠮⡁⢠⣴⣦⠰⣇⠀⠀⠚⠉⢛⣠⡌⢉⣉⡉⢒⣉⣽⡀⠀⢸⠂⠀⠀⠰⠁⡄⠀⠀⠀⠆⡆⢀⠷⢵⢸⣹⣿⣿⣿⣿⣿⣿⠸⠁⠂⠀⡇
+⠀⠀⠀⠀⠀⠄⣿⣸⣿⡿⠩⡛⣼⢣⣿⣇⠻⢠⣾⣿⠏⣾⢣⣿⢸⢵⡿⡸⢣⠂⠀⠀⠁⠀⠀⠀⠃⠀⠀⠀⠀⠀⠀⠀⣀⣼⣿⣿⣿⣿⠟⢩⡴⠒⠀⣿⡆⢱⠀⣿⣿⣿⠋⣪⡞⣵⣿⣿⡟⣃⠁⠀⠥⣔⢒⣪⠙⣇⠺⡲⠸⢤⠏⠚⡇⠀⢨⠀⠀⠀⠙⠐⠃⠀⠠⠀⠸⠐⡼⡀⡿⣼⣹⣽⣿⣿⣿⣿⡿⠀⠄⡁⠀⡁
+⠀⠀⠀⠀⠐⠀⢁⡏⡿⣱⢧⣰⡿⣼⣿⣿⣷⡘⡿⠁⣰⡏⢟⣅⡟⢬⠔⠀⣋⠚⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣿⣿⣿⣿⠟⣉⠀⠈⠀⠀⢰⣚⢤⡯⢆⣿⡿⠃⠀⣀⢾⣿⣿⣿⣿⠋⣰⠋⡴⣇⡌⠉⠁⠘⢆⢝⣃⠈⠓⢹⣧⠀⠀⠀⠀⠀⠀⠀⠂⠁⠐⠆⠀⣱⢱⡇⠄⣿⢼⣿⣿⣿⣿⠟⡧⢈⠐⡀⠀⡄
+⠀⠀⠀⠀⠀⠰⣼⣈⣵⣿⢸⣿⢣⣿⣿⣿⣿⣿⠗⠀⣴⢹⣻⢉⣾⡇⠀⣾⡇⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⣿⣿⣿⡿⠫⠈⠀⢋⣄⠀⠀⠀⡯⢧⢲⠀⣴⣾⠏⣰⠏⣼⠟⡿⢟⠕⢀⣜⡒⠒⠉⡍⠐⠒⢦⠈⢒⠍⠠⠀⠃⢈⡁⠀⠀⠀⠀⠀⠀⠀⠀⣼⠁⠁⡀⣾⠙⣠⠈⢸⣿⣿⣿⣿⣾⡗⢀⠂⠄⠀⡇
+⠀⠀⠀⠀⠀⠀⣿⣿⣿⡿⠀⣿⣼⣿⣿⣿⡿⢡⡆⢸⣿⢸⠁⢰⣿⠀⠁⡿⠆⠀⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⣠⣿⣿⣿⡿⠋⠀⠀⠀⠰⢸⣿⡀⠀⠀⠐⡋⣡⣾⣿⣜⢓⢋⢚⡋⡖⠵⠃⢀⣿⣿⡇⠀⠉⠆⠢⢤⠎⢀⡼⢺⡟⠤⣈⣿⣿⠀⠀⡐⠀⠀⠀⠀⢀⡏⠀⢀⢀⢁⠄⠨⠀⣼⣿⣿⣿⡏⣿⡇⡀⠈⠂⠀⡇
+⠀⠀⠀⠀⠀⢸⣿⣿⣿⡇⢾⡇⣿⠟⠉⣿⠇⠘⠠⢼⡟⢎⡀⡸⠇⠀⡐⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⣿⣿⣿⡏⠀⠀⠀⠀⠀⠀⠀⢻⡇⠀⠀⠀⣴⣿⣿⢻⣿⠸⢸⠨⠆⡠⣢⠮⠘⠋⣿⡗⣀⠈⠌⠙⠒⠒⠀⠀⡨⣀⠀⠀⢻⡇⠀⡆⡅⠀⠀⠀⠀⠜⡡⠀⠀⠱⣸⠀⠀⣾⣿⣿⣿⣿⡇⣿⠃⣀⠠⠁⠀⡅
+⠀⠀⠀⠀⠰⢺⣿⣿⣿⢰⢼⢹⡏⠀⠀⠟⠀⠀⡎⠘⡇⣬⢰⠁⠀⠐⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣿⣿⣹⠋⠀⠀⠀⠀⠀⠀⠀⠀⠈⠡⠇⠀⠸⠿⠛⠛⢋⣿⣦⣽⣾⣜⠅⠙⡱⣫⠆⣿⡧⠟⠀⠀⢈⠀⣐⣀⠰⣀⠴⠿⢃⠘⠇⠀⠇⡆⠀⠀⠀⠀⠋⠁⠀⡃⠅⠃⢀⠘⠋⠙⡜⣿⣿⢧⡟⠀⠀⠀⠀⠀⡆
+⠀⠀⠀⠀⡞⢸⣿⣿⣿⠈⡎⣿⠃⡀⠀⣠⣴⡆⠀⠈⢡⡏⡋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣼⣿⣿⣿⢨⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠡⡀⢰⠈⢁⣵⣿⣿⣿⣿⠿⢋⣥⣬⣾⡧⣤⣿⡗⠀⠀⢰⠇⠠⣟⢈⠆⠘⠆⣉⢀⢲⡇⠨⠁⠀⡅⠀⠀⠀⠀⠀⠰⢀⠀⣸⣹⠇⡇⢐⠇⣸⣿⢸⢃⠀⡄⠀⠀⠀⠁
+⠀⠀⠀⢰⡧⣾⣿⣿⡏⡀⠛⢉⡾⠈⣸⡏⠛⠃⠀⠀⣼⢠⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣿⣿⣿⣿⡿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠀⣼⣿⣿⡿⠟⡉⢀⣴⣿⠟⠉⡀⣀⢀⣶⣷⠀⡀⡈⠆⣉⣤⣤⠂⣘⠶⣿⣿⠰⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠀⠀⢆⠏⣰⡇⡰⣠⣿⡿⡹⠆⠸⠀⠀⠀⠀⠀
+⠀⠀⠀⠘⢰⢻⣿⣿⡏⢸⣿⠀⠆⠀⠛⣿⠆⢠⠀⠀⠈⠂⡞⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⡿⣿⣇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⡿⠋⠁⠠⣀⣴⠿⠋⣡⠎⠀⣄⠿⢸⣿⣿⡇⢠⠣⡀⠉⠄⢢⠅⠀⠀⣂⣽⡧⢹⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠁⢁⣰⢀⢻⣇⢑⣿⣿⢇⣇⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠘⣸⣿⣿⢇⢸⣿⡄⠀⡇⠀⠙⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢾⣿⣿⠟⠀⠑⣧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡛⢉⣤⣶⠿⠋⠁⠀⢠⣏⡀⡞⠈⠈⠁⢻⣿⡇⠈⠃⠀⣙⡁⠎⠡⠀⠀⣿⢸⠃⠀⢀⠀⠀⠐⠀⠀⢀⠀⠀⠌⠀⠄⢫⠏⡁⢎⣽⣿⣿⢸⣿⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⣬⢼⣿⣿⢸⢸⣿⣿⠀⠁⡇⠀⡀⢸⠀⠠⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢹⣿⠁⠀⢀⣀⢻⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠵⠟⢉⠠⢒⣤⡞⢁⣬⣾⠗⠀⣤⡷⠶⢸⣿⡃⢸⡄⠀⡜⢧⠰⢲⢸⠀⡟⠡⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠒⢢⣴⢃⣼⣿⣿⣇⣿⠊⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢠⡻⣼⣿⣿⠈⣾⠻⠏⡠⠰⠃⠹⢣⡌⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⠀⣴⠋⣘⡈⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⣤⣵⣾⣿⣫⡾⢟⠛⣡⣴⠿⠫⠄⠸⡌⢿⣿⠈⣷⡇⠃⠘⠀⠘⠀⠀⠡⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⢔⡿⡃⣾⣿⣿⡿⣸⠃⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢸⠇⣿⣿⣟⡰⣷⠘⠀⠁⠀⠀⠊⠂⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿⠀⣩⠈⠈⢃⠀⡤⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣼⣿⣿⣿⠟⡋⠡⣰⠟⡋⢁⢰⠆⠀⡆⠱⢨⣿⡅⣟⠇⢈⠀⠀⠀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢐⢠⡿⡱⣹⣿⣿⢋⣵⠏⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢸⠇⣿⣿⡏⢧⠿⠅⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢻⡇⠹⣄⠀⣸⠂⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⠿⠟⣋⢠⣢⠖⡊⢔⣠⢾⡏⠏⠀⣀⣀⠄⠀⢿⣷⠨⠃⠈⠀⠀⢃⠀⡈⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠀⠀⢀⠘⠄⢰⣿⣿⢣⣿⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣼⡞⣿⣿⡇⠸⠀⠀⢸⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢁⣀⠈⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠰⠐⢪⡴⠋⠔⢉⣴⣿⠃⠈⡀⣠⡞⠹⣿⡀⠀⢺⡇⠀⢀⠀⠀⢰⠈⠀⠉⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠘⠁⠀⡆⠈⢀⣼⣿⢏⣾⡿⠀⠀⠰⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠂⠀⣿⢿⣿⣿⡇⢀⠀⠀⠘⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣶⣿⣽⣰⣾⣿⡿⠋⠀⢁⠂⡟⠀⢸⡽⠅⠃⠨⣷⠈⢸⠀⠀⣼⠄⠀⠀⠀⠀⠀⠀⠀⠀⠂⠀⠀⠀⠀⠀⣼⠃⢠⣾⣿⣏⣼⠟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣿⣸⣿⡣⠇⡘⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠛⠛⠿⢿⣿⠿⠁⡁⢸⣷⡿⢠⡗⠂⡇⢢⢠⢰⠄⢺⣦⠀⢌⢃⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠃⡴⣼⣿⡟⣼⠋⠀⠀⠀⢀⠂⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⣿⣿⣽⠃⠄⡏⢀⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⢠⢰⣔⠈⠀⡁⢾⢟⣵⢺⡇⠁⣇⢸⡏⠠⡄⠈⣶⡆⣄⣾⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠀⠀⡐⣴⣿⣯⠚⠁⠌⠀⠀⠀⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢱⣿⣸⠀⠁⡇⠘⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⠀⠈⠿⡘⠃⢁⣴⣿⣿⡌⣿⡆⢹⠀⣗⡂⣇⡁⣄⢨⠀⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠸⣿⣿⠏⠀⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢸⣿⢸⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠂⠠⢀⠱⣴⠛⠿⣿⣿⣿⣧⣄⣾⠃⡻⣧⢿⡿⠀⡒⡄⡄⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠂⠐⠀⡀⣼⣿⡏⠀⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⡄⠸⡏⡇⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠘⠌⢿⣠⣾⣿⣿⣿⣿⣿⣿⣿⣆⢿⡸⣧⠀⠇⢃⠀⠘⡀⡂⠀⠀⠀⠀⠀⠀⠀⠀⠁⢤⡎⠼⣾⣿⡿⢁⠂⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⢱⠀⡇⢰⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⡄⠀⠈⢻⣿⡿⣿⣿⣿⡇⣿⣿⣿⣼⡇⣿⣇⠚⡈⡜⣦⠡⡅⠀⠀⠀⠀⠀⠀⠀⡠⢠⡆⢠⠞⣛⠿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⡃⠈⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠁⠀⠀⠸⣟⣽⣿⣿⣿⡇⢿⣿⣿⡏⣧⢿⢷⠠⢙⢧⢿⠰⣡⠀⠀⠀⠀⠀⠀⠀⣠⢇⡘⢋⣴⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⢀⠀⢀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠠⣸⠿⣹⣿⣿⠃⢻⣿⣿⣷⣿⡞⠾⢎⠼⣌⡜⡜⠦⢃⠀⠀⠀⠠⠁⠖⢩⡎⡵⠛⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+```
+
+</details>
 
 ## Features
 
 - Pure black (`#000000`) and white (`#FFFFFF`) throughout
 - Seraphim startup screen drawn as a field of dots, revealed outward from the
   centre, then the title sputters on like a failing tube
-- Main menu with keyboard and mouse navigation
-- **The Empty Library**: a quiet room with empty shelves and nothing to do
-- **Pixel Paint**: a 32x32 monochrome canvas with brush sizes, erasing, undo and
-  clear
+- An OS-style main menu: a dithered monitor case with screws, vents and a
+  breathing power lamp around a desktop of app icons
+- Finder window, menubar and taskbar for the selected app, drawn entirely in
+  black and white; keyboard and mouse both work. The painted window controls,
+  taskbar chips, start menu, menubar sections and signal bars all act
+- A CC0 ambient score: an intro choir under the seraphim, a dark shrine loop on
+  the menu and a cathedral loop in the rooms. Click the signal bars, or press
+  `M` anywhere, to mute
+- A slowly turning orthogonal ring pattern glows behind every screen except
+  the startup: rings of circles that cross each other at right angles, joined
+  by straight chords and dithered to pure black and white. On the menu it is
+  the wallpaper behind the icons.
+- **Bethelament**: a quiet room of shelves and bookcases, with a small hooded
+  pilgrim you walk around it using WASD or the arrow keys
+- **Painter**: a 32x32 monochrome canvas with brush sizes (1-3 or the mouse
+  wheel), erasing, undo and redo, and clear
+- **Veil**: a dial-up browser of fifteen dead pages, with tabs, back, forward,
+  reload and a link to follow. It never touches the network
 - 10x10 pixel-art bookshelf logo, used both in the window and as the app icon
 - Titles set in Squealer, a CC0 blackletter typeface embedded in the executable
 - Native resizable window, dark title bar, minimise/maximise, snap layouts,
@@ -38,6 +184,108 @@ the `ANAISE` title ignites like a failing fluorescent tube: a short, fixed
 sequence of dark, partly lit and fully lit frames before it stays on. The splash
 leaves for the main menu on its own; a key or a click skips it.
 
+## Background rings
+
+Every screen after the startup hangs a large ring pattern behind it, drawn in
+the spirit of the orthogonal ring patterns in the plane: a ring of circles that
+cross their neighbours at right angles, and each ring inward crossing the ring
+before it at right angles as well. Straight chords join the circle centres, so
+the figure carries both the rings and the web of lines through them.
+
+The pattern turns very slowly. Alternate rings counter-rotate, the whole figure
+breathes and drifts a few pixels, and an arm of light travels around it, so it
+never repeats exactly. The drawing is not made of lines at all: each circle and
+chord adds light to a field, the field is ordered-dithered with a Bayer matrix,
+and only pure black and white pixels are written to the window. The glow is
+therefore made of white dust rather than greys, which keeps the palette intact.
+
+The pattern fades out under the page header and footer of Bethelament and the
+Painter canvas. On the menu it runs edge to edge inside the monitor glass, as
+the desktop wallpaper, combed with CRT scanlines and covered only by the solid
+black shell.
+
+## Main menu
+
+The menu is a small monochrome computer. A dithered case wraps the window with
+corner screws, vent slots, a nameplate and a power lamp that breathes with the
+ring pattern. Inside the glass sit a menubar, a desktop of four app icons
+(Bethelament, Painter, Veil and Shutdown), a finder window describing the
+selected app, and a taskbar with the same apps and a clock set to the witching
+hour.
+
+Selecting an icon inverts its plate and its label, draws an old-fashioned
+selection marquee, and fills the finder window with the app's title, purpose,
+controls and file facts. The window's occult seal is a field of single white
+pixels and short dashes rather than a filled shape, so the whole shell stays
+inside the two-colour palette. Up and down move, Enter or a click opens, and
+Esc closes the machine from the menu.
+
+Every piece of chrome that looks like a control works. The start plate opens a
+start menu, the taskbar chips open their app, and the window's close, zoom and
+minimise boxes quit, maximise and minimise. `PROGRAMS` opens the selected app,
+`ROOMS` goes straight to Bethelament, `LIGHT` hides or restores the ring
+wallpaper, and the signal bars at the right of the taskbar mute the music
+(pressing `M` does the same from any screen).
+Hovering any of them marks it with a dashed marquee or an underline.
+
+## Music
+
+Three public-domain tracks are embedded in the executable as mono 22.05 kHz
+WAVs, so there is no soundtrack folder and nothing to download. The intro plays
+under the seraphim and hands over to the menu loop; Bethelament and the Painter
+share the room loop. Changes crossfade over about half a second, and the loops
+were seam-edited before conversion so they do not click.
+
+| Track | Author | Source |
+| --- | --- | --- |
+| Intro: *The Fade* | Breadman | <https://opengameart.org/content/the-fade> |
+| Menu: *Dark Shrine Loop* | qubodup (remix of yd) | <https://opengameart.org/content/dark-shrine-loop> |
+| Rooms: *Cathedral in the Forest* | congusbongus | <https://opengameart.org/content/cathedral-in-the-forest-ambient-loop> |
+
+All three are CC0 1.0 Universal (public domain dedication), so no credit is
+required; the table and `assets/audio/CREDITS.txt` record the provenance
+anyway. Audio is optional: if no output device can be opened the app runs
+silently. Click the signal bars in the taskbar, or press `M`, to mute or
+unmute.
+
+## Bethelament
+
+Bethelament is a 13 x 9 tile room drawn in the same dots and bars as the rest of
+the app. A small hooded pilgrim walks it the way an RPG Maker character moves:
+one tile per step, four facings, and a three-frame walk cycle (left step,
+standing, right step) that falls back to the standing frame when they stop.
+Holding two directions walks in the one pressed last, and the walls and
+bookcases block the way. `Esc` returns to the menu.
+
+While a step is in flight the pilgrim turns into light: the silhouette leaves a
+short afterimage along the axis it is walking on, never across it, and sits in a
+halo that fades out through an ordered dither. The smear swells mid-step and is
+gone by the time the next square is reached; standing still, only a quiet glow
+remains. Everything stays black and white, the same way the ring pattern does.
+
+The space around the pilgrim bends as well. The room is drawn to an offscreen
+surface, then sampled through a small barrel lens that magnifies and turns the
+floor around the walker and combs a slow ripple through it, and only then is the
+result copied back and the pilgrim drawn on top. The lens strengthens mid-step
+and settles to a faint shimmer at rest. Sampling keeps a pixel-sized footprint, so
+the room's one-pixel rug and shelf lines bend instead of breaking into dashes,
+and the output is still nothing but black and white.
+
+## Veil
+
+Veil is a browser that outlived the network it was built for. Fifteen addresses
+are stored in the executable, so every page is local and no socket is ever
+opened: a welcome page, a shrine, an order, a guestbook that should not exist,
+and the rest of the crawl.
+
+The chrome is a tab strip, back and forward arrows, a reload plate, an address
+bar and one link per page. Arrow keys and the mouse wheel turn the tabs, `Tab`
+and the link plate follow the page's link, `1`-`9` and `0` jump to a tab,
+`Home` and `End` go to the first and last page, `R` reloads, and `Esc` leaves.
+Every page spends a moment contacting its host behind a dithered progress bar
+before it paints, and the reload plate repeats that wait. Hovering a control
+draws a hand cursor and inverts the plate.
+
 ## Build
 
 Requires MinGW-w64 (`g++` and `windres`) on `PATH`.
@@ -45,6 +293,7 @@ Requires MinGW-w64 (`g++` and `windres`) on `PATH`.
 ```bat
 build.bat
 run.bat
+test.bat
 ```
 
 The executable is written to `bin\Anaise.exe`. It is linked statically against
@@ -65,15 +314,55 @@ powershell -ExecutionPolicy Bypass -File tools\make_shortcut.ps1
 The shortcut points at `bin\Anaise.exe` and uses the icon embedded in it, so
 it keeps working as long as the repository stays where it is.
 
+## Testing
+
+Everything is headless by default. The app can render any screen into a PNG
+without creating a window, so builds, tests and captures never flash on screen
+or steal focus.
+
+```bat
+powershell -ExecutionPolicy Bypass -File tools\test.ps1
+```
+
+The test script builds the app, renders every screen offscreen, and checks the
+captures: size, palette, determinism, the splash reveal, and argument handling.
+It prints one line per check and exits non-zero if anything fails.
+
+To just save some screens while working:
+
+```bat
+powershell -ExecutionPolicy Bypass -File tools\headless.ps1 -Screen menu
+```
+
+Or call the renderer directly. `--screen` accepts `splash`, `menu`, `library`,
+`paint`, `browser` or `all`; `--time` is the virtual millisecond at which the frame is
+taken, so a fixed time always produces the same image. For a frozen step in
+Bethelament, add `--walk up|down|left|right` and optionally `--progress 0..100`
+to place the pilgrim partway between two squares. For Veil, use
+`--screen browser --page 1..15` to choose a page.
+
+```bat
+bin\Anaise.exe --headless --screen all --size 1080x740 --time 4200 --out build\headless
+bin\Anaise.exe --headless --screen library --time 4200 --walk right --progress 50 --out build\headless
+```
+
+`tools\capture.ps1` still exists for grabbing a running window, but it uses
+`PrintWindow` and does not activate or raise the window.
+
 ## Layout
 
 ```
-src/main.cpp       Win32 window, menu, startup art, library and pixel paint
+src/main.cpp       Win32 window, menu, startup art, Bethelament, Painter, Veil
+src/audio.h        waveOut streaming for the embedded CC0 tracks
+src/ring_pattern.h the orthogonal ring pattern behind the working screens
+src/occult_art.h   dot art for the Veil pages
 src/angel_art.h    Braille seraphim source art
-src/app.rc         icon, embedded title font, version info
+src/app.rc         icon, embedded title font, music, version info
 assets/             generated 10x10 pixel-art icon
 assets/fonts/       Squealer (CC0 1.0) title typeface and its licence
-tools/              icon generator and development helpers
+assets/audio/       the three CC0 tracks as WAV, with provenance
+docs/screenshots/   losslessly compressed captures for this README
+tools/              icon generator, headless capture and test helpers
 ```
 
 ## Font

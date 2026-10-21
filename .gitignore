@@ -41,6 +41,7 @@ __pycache__/
 dist/
 build/
 bin/
+graphify-out/
 coverage/
 .next/
 .cache/

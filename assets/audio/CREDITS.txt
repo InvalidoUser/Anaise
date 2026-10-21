@@ -1,0 +1,33 @@
+Anaise music
+
+All three tracks are CC0 1.0 (public domain dedication). No attribution is
+required; the authors and source pages are recorded here because the OpenGameArt
+page is the proof of the dedication. Downloaded and checked 2026-10-21.
+
+intro.wav  "The Fade" by Breadman
+           https://opengameart.org/content/the-fade
+           Original: intro_the-fade_breadman.mp3, 1:06, MPEG Layer III.
+           Edit: first 8.5 s, 3 s fade-out, so it ends under the splash -> menu
+           transition.
+
+menu.wav   "Dark Shrine Loop" by qubodup (remix of "Shrine" by yd)
+           https://opengameart.org/content/dark-shrine-loop
+           Original: menu_dark-shrine-loop_qubodup.ogg, 0:56, Vorbis.
+           Edit: silent tail trimmed, 1.5 s crossfade from the tail into the
+           head so the loop is seamless.
+
+room.wav   "Cathedral in the Forest (ambient loop)" by congusbongus
+           https://opengameart.org/content/cathedral-in-the-forest-ambient-loop
+           Original: game_cathedral-in-the-forest_congusbongus.ogg, 2:07,
+           Vorbis.
+           Edit: 50 ms equal-power crossfade at the join to remove the
+           sample-step click.
+
+Conversion
+----------
+All three are downmixed to mono and resampled to 22.05 kHz with libsndfile +
+scipy (polyphase), normalised to about -20 dBFS RMS, peak-limited below 0 dBFS,
+and written as 16-bit PCM WAV. The WAVs are embedded in Anaise.exe as RCDATA
+(resources 201, 202 and 203) so the executable stays self-contained.
+
+Licence: CC0 1.0 Universal, https://creativecommons.org/publicdomain/zero/1.0/

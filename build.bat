@@ -18,7 +18,7 @@ g++ -std=c++20 -O2 -municode -mwindows ^
     src\main.cpp build\app.res ^
     -o bin\Anaise.exe ^
     -static -static-libgcc -static-libstdc++ ^
-    -lgdi32 -luser32
+    -lgdi32 -luser32 -lwinmm
 if errorlevel 1 exit /b 1
 
 echo.

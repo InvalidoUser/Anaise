@@ -19,3 +19,12 @@
 - If a secret is found, stop the commit or push, remove it from staged changes, and tell the user without exposing its value.
 - If a secret was already committed or published, stop pushing and tell the user to revoke or rotate it. Deleting the file in a later commit does not remove the secret from history.
 - Do not force-push, rewrite published history, or delete remote branches without explicit user instruction.
+
+## Testing
+- Run `powershell -ExecutionPolicy Bypass -File tools\test.ps1` for the checks.
+- Capture screens with `tools\headless.ps1` or `bin\Anaise.exe --headless`; both render offscreen and create no window.
+- Do not launch the windowed app during automated work. It appears on the desktop and takes focus.
+
+## Orientation
+- Start from `.opencode/skills/anaise/SKILL.md` and its `references/PROJECT_MAP.md`. They map `src/main.cpp`, list the invariants and commands, and carry a generated line index, so the source does not have to be read whole.
+- Refresh that index after structural changes with `powershell -ExecutionPolicy Bypass -File .opencode\skills\anaise\scripts\map.ps1`.

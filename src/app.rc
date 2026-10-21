@@ -6,6 +6,12 @@
 /* Title typeface: Squealer, CC0 1.0 (assets/fonts) */
 102 RCDATA "assets/fonts/squealer.otf"
 
+/* Music: three CC0 ambient tracks (assets/audio/CREDITS.txt).
+   201 intro, 202 menu, 203 room. The app streams them through waveOut. */
+201 RCDATA "assets/audio/intro.wav"
+202 RCDATA "assets/audio/menu.wav"
+203 RCDATA "assets/audio/room.wav"
+
 /* The application manifest is left to the linker's default: MinGW's ld always
    embeds one and cannot merge another, and the app sets per-monitor DPI
    awareness at startup with SetProcessDpiAwarenessContext. */
