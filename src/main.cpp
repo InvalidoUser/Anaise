@@ -1,9 +1,8 @@
-// The Hollow Spire -- an ASCII text adventure in a native Win32 window.
+// Anaise -- a small black-and-white library.
 //
-// The window is deliberately ordinary: a real frame, a real menu, F11 and
-// Alt+Enter fullscreen, Alt+F4 to close, resizable, DPI aware, with a dark
-// title bar. Everything inside is drawn by hand with GDI: a scrolling story,
-// a status line, and one line of input.
+// A native Win32 app with a dot-art seraphim startup screen, a main menu, the
+// quiet Empty Library room, and a pixel paint canvas. The palette is strictly
+// black and white and nothing is written to disk.
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -12,83 +11,190 @@
 #include <windowsx.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
+#include <cstdint>
 #include <cstdlib>
-#include <cstring>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
-#include "game.h"
+
+#include "angel_art.h"
 
 namespace {
 
-enum MenuId : int {
-    ID_GAME_NEW = 1001,
-    ID_GAME_SAVE,
-    ID_GAME_LOAD,
-    ID_GAME_EXIT,
-    ID_VIEW_FULLSCREEN,
-    ID_VIEW_FONT_INC,
-    ID_VIEW_FONT_DEC,
-    ID_VIEW_CLEAR,
-    ID_HELP_COMMANDS,
-    ID_HELP_ABOUT,
+constexpr int kLogoGrid = 10;
+
+// Title typeface: Squealer by Raymond Larabie (Typodermic Fonts), released
+// under CC0 1.0. See assets/fonts/squealer-LICENSE.txt.
+constexpr int kTitleFontResource = 102;
+const wchar_t* const kTitleFace = L"Squealer";
+
+// The 10x10 logo: three books on a shelf, white on black.
+const wchar_t* const kLogo[kLogoGrid] = {
+    L"..........",
+    L".##..##..#",
+    L".##..##..#",
+    L".##..##..#",
+    L".##..##..#",
+    L".##..##..#",
+    L".##..##..#",
+    L"##########",
+    L"..........",
+    L"..........",
 };
 
-constexpr UINT_PTR kCaretTimer = 1;
-constexpr UINT_PTR kFlashTimer = 2;
-constexpr UINT kCaretIntervalMs = 530;
+const COLORREF kBlack = RGB(0, 0, 0);
+const COLORREF kWhite = RGB(255, 255, 255);
 
-const COLORREF kBgTop = RGB(15, 19, 26);
-const COLORREF kBgBottom = RGB(7, 9, 12);
-const COLORREF kPanel = RGB(15, 19, 25);
-const COLORREF kBorder = RGB(43, 49, 58);
-const COLORREF kBorderBright = RGB(96, 78, 49);
+constexpr int kPaintCols = 32;
+constexpr int kPaintRows = 32;
 
-const COLORREF kInkText = RGB(209, 201, 184);
-const COLORREF kInkAccent = RGB(233, 184, 110);
-const COLORREF kInkRoom = RGB(240, 214, 166);
-const COLORREF kInkArt = RGB(120, 104, 78);
-const COLORREF kInkDim = RGB(122, 125, 131);
-const COLORREF kInkItem = RGB(154, 199, 144);
-const COLORREF kInkGood = RGB(141, 201, 160);
-const COLORREF kInkBad = RGB(226, 127, 107);
-const COLORREF kInkSystem = RGB(124, 160, 186);
-const COLORREF kInkCommand = RGB(228, 224, 212);
+constexpr UINT_PTR kSplashTimer = 1;
+constexpr ULONGLONG kSplashRevealMs = 1700;
+// A beat of quiet angel before the title tries to strike.
+constexpr ULONGLONG kSplashTitleDelayMs = 700;
+constexpr ULONGLONG kSplashHoldMs = 5900;
 
-std::wstring lowerAscii(std::wstring value) {
-    for (wchar_t& ch : value) {
-        if (ch >= L'A' && ch <= L'Z') ch = static_cast<wchar_t>(ch - L'A' + L'a');
-    }
-    return value;
+// The title comes on like a fluorescent tube that is not quite ready: it
+// stutters between dark, half lit and fully lit before it finally stays on.
+// Fed by the splash timer, so each step lasts at least two frames.
+struct TitleFlash {
+    int lit;     // percentage of the title's height that is lit
+    int millis;  // how long this step lasts
+};
+
+constexpr TitleFlash kTitleFlashes[] = {
+    {0, 70},   {55, 60},  {0, 80},   {70, 60},  {0, 70},   {85, 70},
+    {0, 110},  {55, 60},  {95, 70},  {0, 120},  {70, 60},  {100, 90},
+    {0, 70},   {100, 120}, {85, 60}, {100, 160},
+};
+
+constexpr int titleFlickerMs() {
+    int total = 0;
+    for (const TitleFlash& flash : kTitleFlashes) total += flash.millis;
+    return total;
 }
 
-std::wstring trimCopy(const std::wstring& value) {
-    size_t first = 0;
-    while (first < value.size() &&
-           (value[first] == L' ' || value[first] == L'\t')) {
-        ++first;
+// How much of the title is lit, 0-100, at a given point of the flicker.
+int litTitlePercent(ULONGLONG flickerElapsed) {
+    int remaining = static_cast<int>(flickerElapsed);
+    for (const TitleFlash& flash : kTitleFlashes) {
+        if (remaining < flash.millis) return flash.lit;
+        remaining -= flash.millis;
     }
-    size_t last = value.size();
-    while (last > first &&
-           (value[last - 1] == L' ' || value[last - 1] == L'\t')) {
-        --last;
-    }
-    return value.substr(first, last - first);
+    return 100;
 }
 
-COLORREF inkColor(Ink ink) {
-    switch (ink) {
-        case Ink::Accent: return kInkAccent;
-        case Ink::Room: return kInkRoom;
-        case Ink::Art: return kInkArt;
-        case Ink::Dim: return kInkDim;
-        case Ink::Item: return kInkItem;
-        case Ink::Good: return kInkGood;
-        case Ink::Bad: return kInkBad;
-        case Ink::System: return kInkSystem;
-        case Ink::Command: return kInkCommand;
-        case Ink::Text:
-        default: return kInkText;
-    }
+
+struct DotArt {
+    std::vector<std::pair<int, int>> dots;
+    std::vector<std::pair<int, int>> order;
+    int rows = 0;
+    int cols = 0;
+};
+
+const DotArt& seraphimArt() {
+    static const DotArt art = [] {
+        DotArt result;
+
+        // Braille cells are two dots wide and four dots tall. Bit 0 is the
+        // top-left dot; bits 3-5 are the right column and 6-7 the bottom row.
+        constexpr int kDotColumn[8] = {0, 0, 0, 1, 1, 1, 0, 1};
+        constexpr int kDotRow[8] = {0, 1, 2, 0, 1, 2, 3, 3};
+
+        std::vector<std::pair<int, int>> dots;
+        std::size_t position = 0;
+        int lineIndex = 0;
+        while (position < anaise::kSeraphimArt.size()) {
+            std::size_t end = anaise::kSeraphimArt.find('\n', position);
+            if (end == std::string_view::npos) {
+                end = anaise::kSeraphimArt.size();
+            }
+            std::string_view line =
+                anaise::kSeraphimArt.substr(position, end - position);
+            if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+
+            int cellColumn = 0;
+            for (std::size_t i = 0; i < line.size();) {
+                const auto lead = static_cast<unsigned char>(line[i]);
+                std::uint32_t codepoint = 0;
+                int length = 0;
+                if (lead < 0x80) {
+                    codepoint = lead;
+                    length = 1;
+                } else if ((lead & 0xE0) == 0xC0) {
+                    codepoint = lead & 0x1F;
+                    length = 2;
+                } else if ((lead & 0xF0) == 0xE0) {
+                    codepoint = lead & 0x0F;
+                    length = 3;
+                } else if ((lead & 0xF8) == 0xF0) {
+                    codepoint = lead & 0x07;
+                    length = 4;
+                } else {
+                    ++i;
+                    continue;
+                }
+                if (i + static_cast<std::size_t>(length) > line.size()) break;
+                for (int k = 1; k < length; ++k) {
+                    codepoint =
+                        (codepoint << 6) |
+                        (static_cast<unsigned char>(line[i + k]) & 0x3F);
+                }
+                i += static_cast<std::size_t>(length);
+
+                if (codepoint >= 0x2800 && codepoint <= 0x28FF) {
+                    const std::uint32_t pattern = codepoint - 0x2800;
+                    for (int bit = 0; bit < 8; ++bit) {
+                        if (!(pattern & (1u << bit))) continue;
+                        dots.emplace_back(lineIndex * 4 + kDotRow[bit],
+                                          cellColumn * 2 + kDotColumn[bit]);
+                    }
+                }
+                ++cellColumn;
+            }
+            ++lineIndex;
+            position = end + 1;
+        }
+
+        if (dots.empty()) return result;
+
+        // Trim the empty border so the angel can use the full splash area.
+        int minRow = dots.front().first;
+        int maxRow = minRow;
+        int minCol = dots.front().second;
+        int maxCol = minCol;
+        for (const auto& dot : dots) {
+            minRow = std::min(minRow, dot.first);
+            maxRow = std::max(maxRow, dot.first);
+            minCol = std::min(minCol, dot.second);
+            maxCol = std::max(maxCol, dot.second);
+        }
+        for (auto& dot : dots) {
+            dot.first -= minRow;
+            dot.second -= minCol;
+        }
+        result.rows = maxRow - minRow + 1;
+        result.cols = maxCol - minCol + 1;
+        result.dots = std::move(dots);
+        result.order = result.dots;
+
+        const double centerRow = (result.rows - 1) / 2.0;
+        const double centerCol = (result.cols - 1) / 2.0;
+        auto distance = [centerRow, centerCol](const auto& dot) {
+            const double dr = dot.first - centerRow;
+            const double dc = dot.second - centerCol;
+            return dr * dr + dc * dc;
+        };
+        std::sort(result.order.begin(), result.order.end(),
+                  [&distance](const auto& a, const auto& b) {
+                      return distance(a) < distance(b);
+                  });
+        return result;
+    }();
+    return art;
 }
 
 using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
@@ -112,6 +218,14 @@ UINT windowDpi(HWND hwnd) {
     return 96;
 }
 
+UINT systemDpi() {
+    HDC dc = GetDC(nullptr);
+    if (!dc) return 96;
+    int dpi = GetDeviceCaps(dc, LOGPIXELSX);
+    ReleaseDC(nullptr, dc);
+    return dpi > 0 ? static_cast<UINT>(dpi) : 96;
+}
+
 void enableDpiAwareness() {
     HMODULE user32 = GetModuleHandleW(L"user32.dll");
     if (!user32) return;
@@ -120,18 +234,17 @@ void enableDpiAwareness() {
     if (fn) {
         const HANDLE perMonitorV2 = reinterpret_cast<HANDLE>(
             static_cast<LONG_PTR>(-4));
-        fn(perMonitorV2);
+        if (fn(perMonitorV2)) return;
     }
+    // Windows 7, 8.1 and early Windows 10 have no per-monitor API; fall back
+    // to system DPI awareness so the window is not bitmap stretched.
+    using SetProcessDPIAwareFn = BOOL(WINAPI*)();
+    auto legacy = reinterpret_cast<SetProcessDPIAwareFn>(
+        GetProcAddress(user32, "SetProcessDPIAware"));
+    if (legacy) legacy();
 }
 
-std::wstring settingsPath() {
-    const wchar_t* appData = _wgetenv(L"APPDATA");
-    std::wstring base = appData && *appData ? appData
-                                            : L".";
-    return base + L"\\HollowSpire\\settings.ini";
-}
-
-void applyDarkTitleBar(HWND hwnd) {
+void applyMonochromeTitleBar(HWND hwnd) {
     HMODULE dwm = LoadLibraryW(L"dwmapi.dll");
     if (!dwm) return;
     using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
@@ -142,38 +255,37 @@ void applyDarkTitleBar(HWND hwnd) {
         if (FAILED(fn(hwnd, 20, &dark, sizeof(dark)))) {
             fn(hwnd, 19, &dark, sizeof(dark));
         }
-        COLORREF caption = RGB(13, 16, 21);
+        COLORREF caption = kBlack;
         fn(hwnd, 35, &caption, sizeof(caption));
-        COLORREF text = RGB(215, 206, 188);
+        COLORREF text = kWhite;
         fn(hwnd, 36, &text, sizeof(text));
-        COLORREF border = RGB(43, 49, 58);
+        COLORREF border = kWhite;
         fn(hwnd, 34, &border, sizeof(border));
     }
     FreeLibrary(dwm);
 }
 
-struct Cell {
-    wchar_t ch;
-    Ink ink;
-};
-
-struct OutRun {
-    std::wstring text;
-    Ink ink;
-};
-
-struct VisualLine {
-    std::vector<OutRun> runs;
-    bool art = false;
-};
+// Loads the CC0 title typeface from the embedded resource, so the executable
+// carries the font and needs nothing installed on the machine.
+HANDLE loadEmbeddedFont(HINSTANCE instance) {
+    HRSRC resource = FindResourceW(
+        instance, MAKEINTRESOURCEW(kTitleFontResource), RT_RCDATA);
+    if (!resource) return nullptr;
+    HGLOBAL loaded = LoadResource(instance, resource);
+    if (!loaded) return nullptr;
+    void* data = LockResource(loaded);
+    const DWORD size = SizeofResource(instance, resource);
+    if (!data || !size) return nullptr;
+    DWORD fonts = 0;
+    HANDLE handle = AddFontMemResourceEx(data, size, nullptr, &fonts);
+    return fonts ? handle : nullptr;
+}
 
 class App {
 public:
-    App() : game_([](const Block& block) { (void)block; }) {}
-
     bool create(HINSTANCE instance) {
         instance_ = instance;
-        game_ = Game([this](const Block& block) { log_.push_back(block); });
+        embeddedFont_ = loadEmbeddedFont(instance);
 
         WNDCLASSEXW wc{};
         wc.cbSize = sizeof(wc);
@@ -183,60 +295,66 @@ public:
         wc.hIcon = LoadIconW(instance, MAKEINTRESOURCEW(101));
         wc.hIconSm = reinterpret_cast<HICON>(
             LoadImageW(instance, MAKEINTRESOURCEW(101), IMAGE_ICON,
-                       GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
-                       LR_DEFAULTCOLOR));
+                       GetSystemMetrics(SM_CXSMICON),
+                       GetSystemMetrics(SM_CYSMICON), LR_DEFAULTCOLOR));
         wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
-        wc.lpszClassName = L"HollowSpireWindow";
+        wc.lpszClassName = L"AnaiseWindow";
         if (!RegisterClassExW(&wc)) return false;
 
-        menu_ = buildMenu();
-
-        int width = 1240;
-        int height = 860;
-        int x = CW_USEDEFAULT;
-        int y = CW_USEDEFAULT;
-        int maximized = 0;
-
-        std::wstring ini = settingsPath();
-        fontPt_ = std::max(9, std::min(20,
-            static_cast<int>(GetPrivateProfileIntW(L"ui", L"font", 12, ini.c_str()))));
-        int savedWidth = static_cast<int>(GetPrivateProfileIntW(L"window", L"w", 0, ini.c_str()));
-        int savedHeight = static_cast<int>(GetPrivateProfileIntW(L"window", L"h", 0, ini.c_str()));
-        int savedX = static_cast<int>(GetPrivateProfileIntW(L"window", L"x", -32000, ini.c_str()));
-        int savedY = static_cast<int>(GetPrivateProfileIntW(L"window", L"y", -32000, ini.c_str()));
-        maximized = GetPrivateProfileIntW(L"window", L"maximized", 0, ini.c_str());
-        if (savedWidth >= 640 && savedHeight >= 420) {
-            RECT test{savedX, savedY, savedX + savedWidth, savedY + savedHeight};
-            if (MonitorFromRect(&test, MONITOR_DEFAULTTONULL) != nullptr) {
-                width = savedWidth;
-                height = savedHeight;
-                x = savedX;
-                y = savedY;
-            }
+        const UINT dpi = systemDpi();
+        RECT work{};
+        if (!SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0)) {
+            work = {0, 0, GetSystemMetrics(SM_CXSCREEN),
+                    GetSystemMetrics(SM_CYSCREEN)};
         }
+        int windowWidth = MulDiv(1080, static_cast<int>(dpi), 96);
+        int windowHeight = MulDiv(740, static_cast<int>(dpi), 96);
+        const int workWidth = work.right - work.left;
+        const int workHeight = work.bottom - work.top;
+        windowWidth = std::min(windowWidth,
+                               workWidth - MulDiv(80, static_cast<int>(dpi), 96));
+        windowHeight = std::min(windowHeight,
+                                workHeight - MulDiv(80, static_cast<int>(dpi), 96));
+        windowWidth = std::max(windowWidth,
+                               MulDiv(680, static_cast<int>(dpi), 96));
+        windowHeight = std::max(windowHeight,
+                                MulDiv(460, static_cast<int>(dpi), 96));
+        const int windowX = work.left + (workWidth - windowWidth) / 2;
+        const int windowY = work.top + (workHeight - windowHeight) / 2;
 
         hwnd_ = CreateWindowExW(
-            0, wc.lpszClassName, L"The Hollow Spire",
-            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, x, y, width, height, nullptr,
-            menu_, instance, this);
+            0, wc.lpszClassName, L"Anaise",
+            WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, windowX, windowY,
+            windowWidth, windowHeight, nullptr, nullptr, instance, this);
         if (!hwnd_) return false;
 
-        applyDarkTitleBar(hwnd_);
-        if (maximized) {
-            ShowWindow(hwnd_, SW_SHOWMAXIMIZED);
-        } else {
-            ShowWindow(hwnd_, SW_SHOW);
-        }
-        UpdateWindow(hwnd_);
-
         dpi_ = windowDpi(hwnd_);
-        game_.newGame();
-        updateTitle();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        applyMonochromeTitleBar(hwnd_);
+        ShowWindow(hwnd_, SW_SHOW);
+        UpdateWindow(hwnd_);
+        SetFocus(hwnd_);
+
+        splashStart_ = GetTickCount64();
+        SetTimer(hwnd_, kSplashTimer, 33, nullptr);
         return true;
     }
 
 private:
+    enum class Screen { Splash, Menu, Library, Paint };
+
+    static constexpr int kMenuItems = 3;
+    const wchar_t* const kMenuLabels[kMenuItems] = {
+        L"THE EMPTY LIBRARY",
+        L"PIXEL PAINT",
+        L"QUIT",
+    };
+
+    struct GridLayout {
+        int left = 0;
+        int top = 0;
+        int cell = 0;
+    };
+
     // ---------------------------------------------------------------- window
     static LRESULT CALLBACK windowProc(HWND hwnd, UINT message, WPARAM wParam,
                                        LPARAM lParam) {
@@ -253,40 +371,8 @@ private:
         return app->handleMessage(message, wParam, lParam);
     }
 
-    HMENU buildMenu() {
-        HMENU root = CreateMenu();
-
-        HMENU game = CreatePopupMenu();
-        AppendMenuW(game, MF_STRING, ID_GAME_NEW, L"&New Game\tF2");
-        AppendMenuW(game, MF_STRING, ID_GAME_SAVE, L"&Save Chronicle\tF5");
-        AppendMenuW(game, MF_STRING, ID_GAME_LOAD, L"&Load Chronicle\tF9");
-        AppendMenuW(game, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(game, MF_STRING, ID_GAME_EXIT, L"E&xit\tAlt+F4");
-        AppendMenuW(root, MF_POPUP, reinterpret_cast<UINT_PTR>(game), L"&Game");
-
-        HMENU view = CreatePopupMenu();
-        AppendMenuW(view, MF_STRING, ID_VIEW_FULLSCREEN, L"&Fullscreen\tF11");
-        AppendMenuW(view, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(view, MF_STRING, ID_VIEW_FONT_INC, L"Larger Text\tCtrl+Plus");
-        AppendMenuW(view, MF_STRING, ID_VIEW_FONT_DEC, L"Smaller Text\tCtrl+Minus");
-        AppendMenuW(view, MF_SEPARATOR, 0, nullptr);
-        AppendMenuW(view, MF_STRING, ID_VIEW_CLEAR, L"&Clear Scrollback\tCtrl+L");
-        AppendMenuW(root, MF_POPUP, reinterpret_cast<UINT_PTR>(view), L"&View");
-
-        HMENU help = CreatePopupMenu();
-        AppendMenuW(help, MF_STRING, ID_HELP_COMMANDS, L"&Commands\tF1");
-        AppendMenuW(help, MF_STRING, ID_HELP_ABOUT, L"&About");
-        AppendMenuW(root, MF_POPUP, reinterpret_cast<UINT_PTR>(help), L"&Help");
-
-        return root;
-    }
-
     LRESULT handleMessage(UINT message, WPARAM wParam, LPARAM lParam) {
         switch (message) {
-            case WM_CREATE:
-                SetMenu(hwnd_, menu_);
-                return 0;
-
             case WM_ERASEBKGND:
                 return 1;
 
@@ -300,6 +386,13 @@ private:
 
             case WM_SIZE:
                 InvalidateRect(hwnd_, nullptr, FALSE);
+                return 0;
+
+            case WM_TIMER:
+                if (wParam == kSplashTimer) {
+                    tickSplash();
+                    return 0;
+                }
                 return 0;
 
             case WM_DPICHANGED: {
@@ -318,44 +411,71 @@ private:
             case WM_GETMINMAXINFO: {
                 auto* info = reinterpret_cast<MINMAXINFO*>(lParam);
                 int dpi = hwnd_ ? static_cast<int>(dpi_) : 96;
-                info->ptMinTrackSize.x = MulDiv(860, dpi, 96);
-                info->ptMinTrackSize.y = MulDiv(560, dpi, 96);
+                info->ptMinTrackSize.x = MulDiv(680, dpi, 96);
+                info->ptMinTrackSize.y = MulDiv(460, dpi, 96);
                 return 0;
             }
 
-            case WM_SETFOCUS:
-                focused_ = true;
-                caretOn_ = true;
-                SetTimer(hwnd_, kCaretTimer, kCaretIntervalMs, nullptr);
-                InvalidateRect(hwnd_, nullptr, FALSE);
+            case WM_SETCURSOR:
+                if (LOWORD(lParam) == HTCLIENT) {
+                    SetCursor(LoadCursorW(
+                        nullptr,
+                        screen_ == Screen::Paint ? IDC_CROSS : IDC_ARROW));
+                    return TRUE;
+                }
+                break;
+
+            case WM_MOUSEMOVE:
+                onMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
                 return 0;
 
-            case WM_KILLFOCUS:
-                focused_ = false;
-                caretOn_ = false;
-                KillTimer(hwnd_, kCaretTimer);
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return 0;
-
-            case WM_TIMER:
-                if (wParam == kCaretTimer) {
-                    caretOn_ = !caretOn_;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                } else if (wParam == kFlashTimer) {
-                    if (GetTickCount64() > flashUntil_) {
-                        KillTimer(hwnd_, kFlashTimer);
-                        flash_.clear();
-                    }
+            case WM_MOUSELEAVE:
+                mouseTracking_ = false;
+                if (hoverValid_) {
+                    hoverValid_ = false;
                     InvalidateRect(hwnd_, nullptr, FALSE);
                 }
                 return 0;
 
-            case WM_CHAR:
-                onChar(static_cast<wchar_t>(wParam));
+            case WM_LBUTTONDOWN:
+                onMouseDown(true, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+                return 0;
+
+            case WM_LBUTTONUP:
+            case WM_RBUTTONUP:
+                onMouseUp();
+                return 0;
+
+            case WM_RBUTTONDOWN:
+                onMouseDown(false, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+                return 0;
+
+            case WM_CAPTURECHANGED:
+                painting_ = false;
+                lastPaintValid_ = false;
                 return 0;
 
             case WM_KEYDOWN:
-                onKeyDown(wParam, lParam);
+                if (wParam == VK_F11 && !(lParam & (1 << 30))) {
+                    setFullscreen(!fullscreen_);
+                    return 0;
+                }
+                if (wParam == VK_ESCAPE) {
+                    if (fullscreen_) {
+                        setFullscreen(false);
+                        return 0;
+                    }
+                    if (screen_ == Screen::Splash ||
+                        screen_ == Screen::Library || screen_ == Screen::Paint) {
+                        enterMenu();
+                        return 0;
+                    }
+                    if (screen_ == Screen::Menu) {
+                        DestroyWindow(hwnd_);
+                        return 0;
+                    }
+                }
+                handleKey(static_cast<int>(wParam));
                 return 0;
 
             case WM_SYSKEYDOWN:
@@ -370,74 +490,9 @@ private:
                 if (wParam == VK_RETURN) return 0;
                 return DefWindowProcW(hwnd_, message, wParam, lParam);
 
-            case WM_SETCURSOR:
-                if (LOWORD(lParam) == HTCLIENT) {
-                    POINT pt;
-                    GetCursorPos(&pt);
-                    ScreenToClient(hwnd_, &pt);
-                    if (PtInRect(&inputRect_, pt)) {
-                        SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
-                        return TRUE;
-                    }
-                }
-                break;
-
-            case WM_LBUTTONDOWN: {
-                SetFocus(hwnd_);
-                int x = GET_X_LPARAM(lParam);
-                int y = GET_Y_LPARAM(lParam);
-                POINT pt{x, y};
-                if (totalLines_ > visibleLines_ &&
-                    PtInRect(&scrollTrackHit_, pt)) {
-                    draggingScroll_ = true;
-                    SetCapture(hwnd_);
-                    scrollToThumbY(y);
-                    return 0;
-                }
-                if (PtInRect(&inputRect_, pt) && cellW_ > 0) {
-                    int inner = x - inputTextX_;
-                    int index = inputViewStart_ + inner / cellW_;
-                    if (index < 0) index = 0;
-                    if (index > static_cast<int>(input_.size())) {
-                        index = static_cast<int>(input_.size());
-                    }
-                    caret_ = static_cast<size_t>(index);
-                    caretOn_ = true;
-                    tabActive_ = false;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                }
-                return 0;
-            }
-
-            case WM_MOUSEMOVE:
-                if (draggingScroll_) {
-                    scrollToThumbY(GET_Y_LPARAM(lParam));
-                    return 0;
-                }
-                break;
-
-            case WM_LBUTTONUP:
-                if (draggingScroll_) {
-                    draggingScroll_ = false;
-                    ReleaseCapture();
-                    return 0;
-                }
-                break;
-
-            case WM_CAPTURECHANGED:
-                draggingScroll_ = false;
-                break;
-
-            case WM_MOUSEWHEEL: {
-                int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-                int lines = delta / WHEEL_DELTA * 3;
-                scroll_ = std::max(0, std::min(maxScroll_, scroll_ + lines));
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return 0;
-            }
-
-            case WM_COMMAND:
-                onCommand(LOWORD(wParam));
+            case WM_THEMECHANGED:
+            case WM_DWMCOMPOSITIONCHANGED:
+                applyMonochromeTitleBar(hwnd_);
                 return 0;
 
             case WM_CLOSE:
@@ -445,502 +500,311 @@ private:
                 return 0;
 
             case WM_DESTROY:
-                saveSettings();
-                KillTimer(hwnd_, kCaretTimer);
-                KillTimer(hwnd_, kFlashTimer);
-                if (font_) DeleteObject(font_);
+                KillTimer(hwnd_, kSplashTimer);
+                if (titleFont_) DeleteObject(titleFont_);
+                if (headingFont_) DeleteObject(headingFont_);
+                if (bodyFont_) DeleteObject(bodyFont_);
+                if (smallFont_) DeleteObject(smallFont_);
+                if (embeddedFont_) RemoveFontMemResourceEx(embeddedFont_);
                 PostQuitMessage(0);
                 return 0;
         }
         return DefWindowProcW(hwnd_, message, wParam, lParam);
     }
 
-    // --------------------------------------------------------------- command
-    void onCommand(int id) {
-        switch (id) {
-            case ID_GAME_NEW:
-                requestNewGame();
-                break;
-            case ID_GAME_SAVE:
-                game_.save();
-                scroll_ = 0;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                break;
-            case ID_GAME_LOAD:
-                game_.load();
-                scroll_ = 0;
-                updateTitle();
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                break;
-            case ID_GAME_EXIT:
-                PostMessageW(hwnd_, WM_CLOSE, 0, 0);
-                break;
-            case ID_VIEW_FULLSCREEN:
-                setFullscreen(!fullscreen_);
-                break;
-            case ID_VIEW_FONT_INC:
-                changeFont(1);
-                break;
-            case ID_VIEW_FONT_DEC:
-                changeFont(-1);
-                break;
-            case ID_VIEW_CLEAR:
-                clearScrollback();
-                break;
-            case ID_HELP_COMMANDS:
-                game_.showHelp();
-                scroll_ = 0;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                break;
-            case ID_HELP_ABOUT:
-                MessageBoxW(
-                    hwnd_,
-                    L"THE HOLLOW SPIRE\n"
-                    L"An ASCII text adventure in a native Windows window.\n\n"
-                    L"C++ and the Win32 API, with GDI for every letter.\n"
-                    L"No engine, no runtime, no network.\n\n"
-                    L"F11 or Alt+Enter: fullscreen\n"
-                    L"F1: commands    F5: save    F9: load\n"
-                    L"Alt+F4: close",
-                    L"About The Hollow Spire",
-                    MB_OK | MB_ICONINFORMATION);
-                break;
-        }
-    }
-
-    // ----------------------------------------------------------------- input
-    void onChar(wchar_t ch) {
-        if (ch == L'\r' || ch == L'\n' || ch == L'\t' || ch == 27 ||
-            ch == 8) {
-            return;
-        }
-        if (ch < 32 || ch > 126) return;
-        if (input_.size() >= 220) return;
-        input_.insert(input_.begin() + static_cast<long>(caret_), ch);
-        ++caret_;
-        caretOn_ = true;
-        tabActive_ = false;
-        InvalidateRect(hwnd_, nullptr, FALSE);
-    }
-
-    void onKeyDown(WPARAM key, LPARAM lParam) {
-        const bool repeat = (lParam & (1 << 30)) != 0;
-        const bool ctrl = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
-        const bool shift = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
-
-        switch (key) {
-            case VK_F11:
-                if (!repeat) setFullscreen(!fullscreen_);
-                return;
-            case VK_F1:
-                if (!repeat) {
-                    game_.showHelp();
-                    scroll_ = 0;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                }
-                return;
-            case VK_F2:
-                if (!repeat) requestNewGame();
-                return;
-            case VK_F5:
-                if (!repeat) {
-                    game_.save();
-                    scroll_ = 0;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                }
-                return;
-            case VK_F9:
-                if (!repeat) {
-                    game_.load();
-                    scroll_ = 0;
-                    updateTitle();
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                }
-                return;
-            case VK_ESCAPE:
-                if (fullscreen_) {
-                    setFullscreen(false);
-                } else if (!input_.empty()) {
-                    input_.clear();
-                    caret_ = 0;
-                    inputViewStart_ = 0;
-                    tabActive_ = false;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                }
-                return;
-            case VK_RETURN:
-                submitInput();
-                return;
-            case VK_BACK:
-                if (caret_ > 0) {
-                    size_t count = 1;
-                    if (ctrl) {
-                        while (caret_ - count > 0 &&
-                               input_[caret_ - count - 1] == L' ') {
-                            ++count;
-                        }
-                        while (caret_ - count > 0 &&
-                               input_[caret_ - count - 1] != L' ') {
-                            ++count;
-                        }
-                    }
-                    input_.erase(caret_ - count, count);
-                    caret_ -= count;
-                }
-                tabActive_ = false;
-                caretOn_ = true;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_DELETE:
-                if (caret_ < input_.size()) {
-                    input_.erase(caret_, 1);
-                }
-                tabActive_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_LEFT:
-                if (ctrl) {
-                    while (caret_ > 0 && input_[caret_ - 1] == L' ') --caret_;
-                    while (caret_ > 0 && input_[caret_ - 1] != L' ') --caret_;
-                } else if (caret_ > 0) {
-                    --caret_;
-                }
-                caretOn_ = true;
-                tabActive_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_RIGHT:
-                if (caret_ < input_.size()) ++caret_;
-                caretOn_ = true;
-                tabActive_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_HOME:
-                if (ctrl) {
-                    scroll_ = maxScroll_;
-                } else {
-                    caret_ = 0;
-                }
-                caretOn_ = true;
-                tabActive_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_END:
-                if (ctrl) {
-                    scroll_ = 0;
-                } else {
-                    caret_ = input_.size();
-                }
-                caretOn_ = true;
-                tabActive_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_PRIOR:
-                scroll_ = std::min(maxScroll_, scroll_ + visibleLines_ - 2);
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_NEXT:
-                scroll_ = std::max(0, scroll_ - (visibleLines_ - 2));
-                InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
-            case VK_UP:
-                historyMove(-1);
-                return;
-            case VK_DOWN:
-                historyMove(1);
-                return;
-            case VK_TAB:
-                completeInput();
-                return;
-            case VK_INSERT:
-                if (shift || ctrl) pasteClipboard();
-                return;
-            case 'C':
-                if (ctrl) copyTranscript();
-                return;
-            case 'V':
-                if (ctrl) pasteClipboard();
-                return;
-            case 'L':
-                if (ctrl) clearScrollback();
-                return;
-            case VK_OEM_PLUS:
-            case VK_ADD:
-                if (ctrl) changeFont(1);
-                return;
-            case VK_OEM_MINUS:
-            case VK_SUBTRACT:
-                if (ctrl) changeFont(-1);
-                return;
-        }
-    }
-
-    void submitInput() {
-        std::wstring command = trimCopy(input_);
-        if (command.empty()) {
-            input_.clear();
-            caret_ = 0;
+    void tickSplash() {
+        if (screen_ != Screen::Splash) return;
+        if (GetTickCount64() - splashStart_ >= kSplashHoldMs) {
+            enterMenu();
+        } else {
             InvalidateRect(hwnd_, nullptr, FALSE);
+        }
+    }
+
+    void enterMenu() {
+        KillTimer(hwnd_, kSplashTimer);
+        if (painting_) {
+            painting_ = false;
+            lastPaintValid_ = false;
+            if (GetCapture() == hwnd_) ReleaseCapture();
+        }
+        screen_ = Screen::Menu;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
+    void openScreen(Screen screen) {
+        if (painting_) {
+            painting_ = false;
+            lastPaintValid_ = false;
+            if (GetCapture() == hwnd_) ReleaseCapture();
+        }
+        screen_ = screen;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
+    void activateMenuItem() {
+        switch (menuIndex_) {
+            case 0:
+                openScreen(Screen::Library);
+                break;
+            case 1:
+                openScreen(Screen::Paint);
+                break;
+            default:
+                DestroyWindow(hwnd_);
+                break;
+        }
+    }
+
+    void handleKey(int key) {
+        if (screen_ == Screen::Splash) {
+            enterMenu();
+            return;
+        }
+        if (screen_ == Screen::Menu) {
+            if (key == VK_UP || key == 'W') {
+                menuIndex_ = (menuIndex_ + kMenuItems - 1) % kMenuItems;
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            } else if (key == VK_DOWN || key == 'S') {
+                menuIndex_ = (menuIndex_ + 1) % kMenuItems;
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            } else if (key == VK_RETURN || key == VK_SPACE) {
+                activateMenuItem();
+            }
+            return;
+        }
+        if (screen_ == Screen::Paint) {
+            if (key == 'C') {
+                clearCanvas();
+            } else if (key == '1' || key == '2' || key == '3') {
+                paintBrush_ = key - '0';
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            } else if (key == 'Z' &&
+                       (GetKeyState(VK_CONTROL) & 0x8000)) {
+                undoCanvas();
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- mouse
+    void onMouseMove(int x, int y) {
+        if (!mouseTracking_) {
+            TRACKMOUSEEVENT track{};
+            track.cbSize = sizeof(track);
+            track.dwFlags = TME_LEAVE;
+            track.hwndTrack = hwnd_;
+            TrackMouseEvent(&track);
+            mouseTracking_ = true;
+        }
+
+        if (screen_ == Screen::Menu) {
+            const int hit = menuIndexAt(x, y);
+            if (hit >= 0 && hit != menuIndex_) {
+                menuIndex_ = hit;
+                InvalidateRect(hwnd_, nullptr, FALSE);
+            }
             return;
         }
 
-        Block echo;
-        echo.spans.push_back({L"> ", Ink::Accent});
-        echo.spans.push_back({command, Ink::Command});
-        log_.push_back(echo);
+        if (screen_ != Screen::Paint) return;
 
-        addHistory(command);
-        historyPos_ = -1;
-        draft_.clear();
-        input_.clear();
-        caret_ = 0;
-        inputViewStart_ = 0;
-        tabActive_ = false;
-        scroll_ = 0;
+        if (painting_) paintTo(x, y);
 
-        Action action = game_.submit(command);
-        if (action == Action::NewGame) {
-            if (!requestNewGame()) {
-                Block note;
-                note.spans.push_back({L"New game cancelled.", Ink::Dim});
-                log_.push_back(note);
-            }
-        } else if (action == Action::Quit) {
-            PostMessageW(hwnd_, WM_CLOSE, 0, 0);
-        } else if (action == Action::Clear) {
-            clearScrollback();
-        }
-
-        scroll_ = 0;
-        updateTitle();
-        InvalidateRect(hwnd_, nullptr, FALSE);
-    }
-
-    // ------------------------------------------------------------- new game
-    bool requestNewGame() {
-        if (!game_.gameOver() && game_.moves() > 0) {
-            int result = MessageBoxW(
-                hwnd_, L"Abandon this chronicle and begin again?",
-                L"The Hollow Spire", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
-            if (result != IDYES) return false;
-        }
-        log_.clear();
-        input_.clear();
-        caret_ = 0;
-        inputViewStart_ = 0;
-        scroll_ = 0;
-        historyPos_ = -1;
-        game_.newGame();
-        updateTitle();
-        SetFocus(hwnd_);
-        InvalidateRect(hwnd_, nullptr, FALSE);
-        return true;
-    }
-
-    void clearScrollback() {
-        log_.clear();
-        Block note;
-        note.spans.push_back(
-            {L"The scroll is wiped clean. Type LOOK to see where you are.",
-             Ink::Dim});
-        log_.push_back(note);
-        scroll_ = 0;
-        InvalidateRect(hwnd_, nullptr, FALSE);
-    }
-
-    void changeFont(int delta) {
-        fontPt_ = std::max(9, std::min(20, fontPt_ + delta));
-        InvalidateRect(hwnd_, nullptr, FALSE);
-    }
-
-    void updateTitle() {
-        std::wstring title = L"The Hollow Spire";
-        if (game_.gameOver()) {
-            title += L" - The Story Is Ended";
-        } else {
-            title += L" - " + game_.location();
-        }
-        SetWindowTextW(hwnd_, title.c_str());
-    }
-
-    // ------------------------------------------------------ clipboard & tab
-    void copyTranscript() {
-        std::wstring text;
-        for (const auto& block : log_) {
-            for (const auto& span : block.spans) text += span.text;
-            text += L"\r\n";
-        }
-        if (text.empty()) return;
-        if (!OpenClipboard(hwnd_)) return;
-        EmptyClipboard();
-        size_t bytes = (text.size() + 1) * sizeof(wchar_t);
-        HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
-        if (memory) {
-            if (void* target = GlobalLock(memory)) {
-                std::memcpy(target, text.c_str(), bytes);
-                GlobalUnlock(memory);
-                if (!SetClipboardData(CF_UNICODETEXT, memory)) {
-                    GlobalFree(memory);
-                }
-            } else {
-                GlobalFree(memory);
-            }
-        }
-        CloseClipboard();
-        flash(L"transcript copied to clipboard");
-    }
-
-    void pasteClipboard() {
-        if (!IsClipboardFormatAvailable(CF_UNICODETEXT)) return;
-        if (!OpenClipboard(hwnd_)) return;
-        HANDLE handle = GetClipboardData(CF_UNICODETEXT);
-        std::wstring text;
-        if (handle) {
-            if (const wchar_t* source =
-                    static_cast<const wchar_t*>(GlobalLock(handle))) {
-                for (const wchar_t* p = source; *p && text.size() < 220; ++p) {
-                    wchar_t ch = *p;
-                    if (ch == L'\r' || ch == L'\n' || ch == L'\t') ch = L' ';
-                    if (ch >= 32 && ch <= 126) text.push_back(ch);
-                }
-                GlobalUnlock(handle);
-            }
-        }
-        CloseClipboard();
-        if (text.empty()) return;
-        input_.insert(caret_, text);
-        caret_ += text.size();
-        caretOn_ = true;
-        tabActive_ = false;
-        InvalidateRect(hwnd_, nullptr, FALSE);
-    }
-
-    void completeInput() {
-        auto isWordChar = [](wchar_t ch) {
-            return (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') ||
-                   (ch >= L'0' && ch <= L'9') || ch == L'\'';
-        };
-        size_t start = caret_;
-        while (start > 0 && isWordChar(input_[start - 1])) --start;
-        if (start == caret_) return;
-
-        std::wstring prefix = lowerAscii(input_.substr(start, caret_ - start));
-        bool cycling = false;
-        if (tabActive_ && tabStart_ == start && !tabCandidates_.empty()) {
-            std::wstring current = lowerAscii(input_.substr(start, caret_ - start));
-            size_t last = (tabIndex_ + tabCandidates_.size() - 1) %
-                          tabCandidates_.size();
-            if (current == lowerAscii(tabCandidates_[last])) {
-                cycling = true;
-            }
-        }
-        if (!cycling) {
-            tabCandidates_.clear();
-            for (const auto& word : game_.completerWords()) {
-                if (word.size() >= prefix.size() &&
-                    lowerAscii(word).compare(0, prefix.size(), prefix) == 0) {
-                    tabCandidates_.push_back(word);
-                }
-            }
-            std::sort(tabCandidates_.begin(), tabCandidates_.end());
-            tabCandidates_.erase(
-                std::unique(tabCandidates_.begin(), tabCandidates_.end()),
-                tabCandidates_.end());
-            tabStart_ = start;
-            tabPrefix_ = prefix;
-            tabIndex_ = 0;
-            tabActive_ = !tabCandidates_.empty();
-            if (tabCandidates_.empty()) return;
-        }
-
-        std::wstring chosen = tabCandidates_[tabIndex_ % tabCandidates_.size()];
-        input_.replace(start, caret_ - start, chosen);
-        caret_ = start + chosen.size();
-        tabIndex_ = (tabIndex_ + 1) % tabCandidates_.size();
-        caretOn_ = true;
-        InvalidateRect(hwnd_, nullptr, FALSE);
-    }
-
-    // -------------------------------------------------------------- history
-    void addHistory(const std::wstring& command) {
-        if (!history_.empty() && history_.back() == command) return;
-        history_.push_back(command);
-        if (history_.size() > 200) history_.erase(history_.begin());
-    }
-
-    void historyMove(int direction) {
-        if (history_.empty()) return;
-        if (historyPos_ == -1) {
-            draft_ = input_;
-            historyPos_ = direction < 0 ? static_cast<int>(history_.size()) - 1
-                                        : -1;
-            if (historyPos_ == -1) return;
-        } else {
-            historyPos_ += direction;
-            if (historyPos_ >= static_cast<int>(history_.size())) {
-                historyPos_ = -1;
-                input_ = draft_;
-                caret_ = input_.size();
-                tabActive_ = false;
+        int col = 0;
+        int row = 0;
+        const bool inside = paintCellAt(x, y, col, row);
+        if (!inside) {
+            if (hoverValid_) {
+                hoverValid_ = false;
                 InvalidateRect(hwnd_, nullptr, FALSE);
-                return;
             }
-            if (historyPos_ < 0) historyPos_ = 0;
+        } else if (!hoverValid_ || col != hoverCol_ || row != hoverRow_) {
+            hoverValid_ = true;
+            hoverCol_ = col;
+            hoverRow_ = row;
+            InvalidateRect(hwnd_, nullptr, FALSE);
         }
-        input_ = history_[historyPos_];
-        caret_ = input_.size();
-        tabActive_ = false;
-        caretOn_ = true;
+    }
+
+    void onMouseDown(bool leftButton, int x, int y) {
+        SetFocus(hwnd_);
+
+        if (screen_ == Screen::Splash) {
+            enterMenu();
+            return;
+        }
+        if (screen_ == Screen::Menu) {
+            if (!leftButton) return;
+            const int hit = menuIndexAt(x, y);
+            if (hit >= 0) {
+                menuIndex_ = hit;
+                InvalidateRect(hwnd_, nullptr, FALSE);
+                activateMenuItem();
+            }
+            return;
+        }
+        if (screen_ != Screen::Paint) return;
+
+        int col = 0;
+        int row = 0;
+        if (!paintCellAt(x, y, col, row)) return;
+
+        pushUndo();
+        painting_ = true;
+        lastPaintValid_ = false;
+        erasing_ = !leftButton;
+        SetCapture(hwnd_);
+        paintTo(x, y);
+    }
+
+    void onMouseUp() {
+        if (!painting_) return;
+        painting_ = false;
+        lastPaintValid_ = false;
+        if (GetCapture() == hwnd_) ReleaseCapture();
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
-    // ------------------------------------------------------------- flashing
-    void flash(const std::wstring& text) {
-        flash_ = text;
-        flashUntil_ = GetTickCount64() + 1600;
-        SetTimer(hwnd_, kFlashTimer, 200, nullptr);
-        InvalidateRect(hwnd_, nullptr, FALSE);
+    int menuIndexAt(int x, int y) const {
+        RECT client{};
+        GetClientRect(hwnd_, &client);
+        for (int i = 0; i < kMenuItems; ++i) {
+            RECT item = menuItemRect(i, client.right, client.bottom);
+            if (PtInRect(&item, POINT{x, y})) return i;
+        }
+        return -1;
     }
 
-    void scrollToThumbY(int y) {
-        int travel = scrollTrackHeight_ - scrollThumbHeight_;
-        if (travel <= 0 || maxScroll_ <= 0) return;
-        int offset = y - storyTop_ - scrollThumbHeight_ / 2;
-        offset = std::max(0, std::min(travel, offset));
-        scroll_ = maxScroll_ - (maxScroll_ * offset + travel / 2) / travel;
-        scroll_ = std::max(0, std::min(maxScroll_, scroll_));
-        InvalidateRect(hwnd_, nullptr, FALSE);
+    RECT menuItemRect(int index, int width, int height) const {
+        const int scale = static_cast<int>(dpi_);
+        const int margin = MulDiv(34, scale, 96);
+        const int itemWidth =
+            std::min(width - margin * 2, MulDiv(460, scale, 96));
+        const int itemHeight = MulDiv(56, scale, 96);
+        const int gap = MulDiv(12, scale, 96);
+        const int total = itemHeight * kMenuItems + gap * (kMenuItems - 1);
+        const int logoCell = std::max(2, MulDiv(5, scale, 96));
+        const int headerBottom =
+            margin + logoCell * kLogoGrid + MulDiv(20, scale, 96) + 1;
+        int startY = std::max(headerBottom + MulDiv(40, scale, 96),
+                              (height - total) / 2 + MulDiv(10, scale, 96));
+        const int maximumStart =
+            height - MulDiv(112, scale, 96) - total;
+        if (startY > maximumStart) startY = maximumStart;
+        if (startY < headerBottom + MulDiv(12, scale, 96)) {
+            startY = headerBottom + MulDiv(12, scale, 96);
+        }
+        const int left = (width - itemWidth) / 2;
+        const int top = startY + index * (itemHeight + gap);
+        return RECT{left, top, left + itemWidth, top + itemHeight};
     }
 
-    // ------------------------------------------------------------- settings
-    void saveSettings() {
-        std::wstring ini = settingsPath();
-        std::wstring folder = ini.substr(0, ini.find_last_of(L'\\'));
-        CreateDirectoryW(folder.c_str(), nullptr);
+    // -------------------------------------------------------------- painting
+    GridLayout paintLayout(int width, int height) const {
+        const int scale = static_cast<int>(dpi_);
+        const int margin = MulDiv(34, scale, 96);
+        const int logoCell = std::max(2, MulDiv(4, scale, 96));
+        const int headerBottom =
+            margin + logoCell * kLogoGrid + MulDiv(18, scale, 96) + 1;
+        const int topLimit = headerBottom + MulDiv(20, scale, 96);
+        const int bottomLimit = height - MulDiv(58, scale, 96);
+        const int availableWidth = width - margin * 2;
+        const int availableHeight = bottomLimit - topLimit;
+        int cell = std::min(availableWidth / kPaintCols,
+                            availableHeight / kPaintRows);
+        cell = std::max(4, cell);
+        const int gridWidth = cell * kPaintCols;
+        const int gridHeight = cell * kPaintRows;
+        GridLayout layout;
+        layout.cell = cell;
+        layout.left = (width - gridWidth) / 2;
+        layout.top = topLimit + std::max(0, (availableHeight - gridHeight) / 2);
+        return layout;
+    }
 
-        WINDOWPLACEMENT placement{};
-        if (fullscreen_ && placement_.length) {
-            placement = placement_;
+    bool paintCellAt(int x, int y, int& col, int& row) const {
+        RECT client{};
+        GetClientRect(hwnd_, &client);
+        const GridLayout layout = paintLayout(client.right, client.bottom);
+        if (layout.cell <= 0) return false;
+        if (x < layout.left || y < layout.top) return false;
+        const int localX = x - layout.left;
+        const int localY = y - layout.top;
+        col = localX / layout.cell;
+        row = localY / layout.cell;
+        return col >= 0 && col < kPaintCols && row >= 0 && row < kPaintRows;
+    }
+
+    void paintTo(int x, int y) {
+        int col = 0;
+        int row = 0;
+        if (!paintCellAt(x, y, col, row)) {
+            lastPaintValid_ = false;
+            return;
+        }
+        if (lastPaintValid_) {
+            paintLine(lastPaintCol_, lastPaintRow_, col, row, erasing_);
         } else {
-            placement.length = sizeof(placement);
-            GetWindowPlacement(hwnd_, &placement);
+            stampBrush(col, row, erasing_);
         }
-        bool maximized = placement.showCmd == SW_SHOWMAXIMIZED;
-        RECT rect = placement.rcNormalPosition;
+        lastPaintCol_ = col;
+        lastPaintRow_ = row;
+        lastPaintValid_ = true;
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
 
-        std::wstring buffer;
-        buffer = std::to_wstring(rect.left);
-        WritePrivateProfileStringW(L"window", L"x", buffer.c_str(), ini.c_str());
-        buffer = std::to_wstring(rect.top);
-        WritePrivateProfileStringW(L"window", L"y", buffer.c_str(), ini.c_str());
-        buffer = std::to_wstring(rect.right - rect.left);
-        WritePrivateProfileStringW(L"window", L"w", buffer.c_str(), ini.c_str());
-        buffer = std::to_wstring(rect.bottom - rect.top);
-        WritePrivateProfileStringW(L"window", L"h", buffer.c_str(), ini.c_str());
-        WritePrivateProfileStringW(L"window", L"maximized",
-                                   maximized ? L"1" : L"0", ini.c_str());
-        buffer = std::to_wstring(fontPt_);
-        WritePrivateProfileStringW(L"ui", L"font", buffer.c_str(), ini.c_str());
+    void stampBrush(int col, int row, bool erase) {
+        const int start = -(paintBrush_ - 1) / 2;
+        for (int dr = 0; dr < paintBrush_; ++dr) {
+            for (int dc = 0; dc < paintBrush_; ++dc) {
+                const int targetCol = col + start + dc;
+                const int targetRow = row + start + dr;
+                if (targetCol < 0 || targetCol >= kPaintCols ||
+                    targetRow < 0 || targetRow >= kPaintRows) {
+                    continue;
+                }
+                canvas_[targetRow][targetCol] = !erase;
+            }
+        }
+    }
+
+    void paintLine(int x0, int y0, int x1, int y1, bool erase) {
+        int dx = std::abs(x1 - x0);
+        int sx = x0 < x1 ? 1 : -1;
+        int dy = -std::abs(y1 - y0);
+        int sy = y0 < y1 ? 1 : -1;
+        int error = dx + dy;
+        for (;;) {
+            stampBrush(x0, y0, erase);
+            if (x0 == x1 && y0 == y1) break;
+            const int twice = error * 2;
+            if (twice >= dy) {
+                error += dy;
+                x0 += sx;
+            }
+            if (twice <= dx) {
+                error += dx;
+                y0 += sy;
+            }
+        }
+    }
+
+    void pushUndo() {
+        if (undo_.size() >= 64) undo_.erase(undo_.begin());
+        undo_.push_back(canvas_);
+    }
+
+    void undoCanvas() {
+        if (undo_.empty()) return;
+        canvas_ = undo_.back();
+        undo_.pop_back();
+        InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
+    void clearCanvas() {
+        pushUndo();
+        for (auto& row : canvas_) row.fill(false);
+        InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
     // ------------------------------------------------------------ fullscreen
@@ -955,7 +819,6 @@ private:
             info.cbSize = sizeof(info);
             GetMonitorInfoW(MonitorFromWindow(hwnd_, MONITOR_DEFAULTTONEAREST),
                             &info);
-            SetMenu(hwnd_, nullptr);
             SetWindowLongPtrW(hwnd_, GWL_STYLE,
                               WS_POPUP | WS_VISIBLE | WS_CLIPCHILDREN);
             SetWindowPos(hwnd_, HWND_TOP, info.rcMonitor.left, info.rcMonitor.top,
@@ -965,76 +828,121 @@ private:
             fullscreen_ = true;
         } else {
             SetWindowLongPtrW(hwnd_, GWL_STYLE, windowedStyle_);
-            SetMenu(hwnd_, menu_);
             SetWindowPlacement(hwnd_, &placement_);
             SetWindowPos(hwnd_, nullptr, 0, 0, 0, 0,
                          SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER |
                              SWP_FRAMECHANGED);
-            DrawMenuBar(hwnd_);
             fullscreen_ = false;
+            applyMonochromeTitleBar(hwnd_);
         }
         InvalidateRect(hwnd_, nullptr, FALSE);
     }
 
     // --------------------------------------------------------------- drawing
-    void ensureFont(HDC dc) {
-        int effectivePt = effectiveFontPt();
-        if (font_ && fontDpi_ == dpi_ && fontPtCached_ == effectivePt) return;
-        if (font_) {
-            DeleteObject(font_);
-            font_ = nullptr;
+    void ensureFonts() {
+        if (fontsDpi_ == dpi_ && titleFont_ && headingFont_ && bodyFont_ &&
+            smallFont_) {
+            return;
         }
-        LOGFONTW lf{};
-        lf.lfHeight = -MulDiv(effectivePt, static_cast<int>(dpi_), 72);
-        lf.lfWeight = FW_NORMAL;
-        lf.lfCharSet = DEFAULT_CHARSET;
-        lf.lfQuality = CLEARTYPE_QUALITY;
-        lf.lfPitchAndFamily = FIXED_PITCH | FF_MODERN;
-        lstrcpyW(lf.lfFaceName, L"Consolas");
-        font_ = CreateFontIndirectW(&lf);
-        if (!font_) {
-            lstrcpyW(lf.lfFaceName, L"Lucida Console");
-            font_ = CreateFontIndirectW(&lf);
-        }
-        fontDpi_ = dpi_;
-        fontPtCached_ = effectivePt;
+        if (titleFont_) DeleteObject(titleFont_);
+        if (headingFont_) DeleteObject(headingFont_);
+        if (bodyFont_) DeleteObject(bodyFont_);
+        if (smallFont_) DeleteObject(smallFont_);
+        titleFont_ = nullptr;
+        headingFont_ = nullptr;
+        bodyFont_ = nullptr;
+        smallFont_ = nullptr;
+
+        auto makeFont = [this](int points, const wchar_t* face) {
+            LOGFONTW lf{};
+            lf.lfWeight = FW_NORMAL;
+            lf.lfCharSet = DEFAULT_CHARSET;
+            lf.lfQuality = ANTIALIASED_QUALITY;
+            lf.lfPitchAndFamily = DEFAULT_PITCH | FF_DONTCARE;
+            lf.lfHeight = -MulDiv(points, static_cast<int>(dpi_), 72);
+            lstrcpyW(lf.lfFaceName, face);
+            return CreateFontIndirectW(&lf);
+        };
+
+        const wchar_t* displayFace = embeddedFont_ ? kTitleFace : L"Georgia";
+        titleFont_ = makeFont(40, displayFace);
+        headingFont_ = makeFont(24, displayFace);
+        bodyFont_ = makeFont(15, L"Consolas");
+        smallFont_ = makeFont(10, L"Consolas");
+        if (!bodyFont_) bodyFont_ = makeFont(15, L"Courier New");
+        if (!smallFont_) smallFont_ = makeFont(10, L"Courier New");
+        fontsDpi_ = dpi_;
     }
 
-    int effectiveFontPt() const {
-        int pt = fontPt_ + (fullscreen_ ? 4 : 0);
-        return std::max(9, std::min(26, pt));
-    }
-
-    SIZE measure(HDC dc, const std::wstring& text) const {
+    int textWidth(HDC dc, HFONT font, const std::wstring& text) const {
+        HGDIOBJ old = SelectObject(dc, font);
         SIZE size{};
-        if (!text.empty()) {
-            GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()),
-                                  &size);
-        }
-        return size;
+        GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()),
+                              &size);
+        SelectObject(dc, old);
+        return size.cx;
     }
 
-    void drawText(HDC dc, int x, int y, const std::wstring& text,
-                  COLORREF color) {
+    int textHeight(HDC dc, HFONT font) const {
+        HGDIOBJ old = SelectObject(dc, font);
+        TEXTMETRICW metrics{};
+        GetTextMetricsW(dc, &metrics);
+        SelectObject(dc, old);
+        return metrics.tmHeight;
+    }
+
+    void drawTextAt(HDC dc, HFONT font, const std::wstring& text, int x, int y,
+                    COLORREF color, UINT align = TA_LEFT | TA_TOP) const {
         if (text.empty()) return;
+        HGDIOBJ old = SelectObject(dc, font);
         SetTextColor(dc, color);
+        SetTextAlign(dc, align);
         TextOutW(dc, x, y, text.c_str(), static_cast<int>(text.size()));
+        SetTextAlign(dc, TA_LEFT | TA_TOP);
+        SelectObject(dc, old);
     }
 
-    void drawRight(HDC dc, int right, int y, const std::wstring& text,
-                   COLORREF color) {
-        SIZE size = measure(dc, text);
-        drawText(dc, right - size.cx, y, text, color);
+    void drawTextCentered(HDC dc, HFONT font, const std::wstring& text, int x,
+                          int y, COLORREF color) const {
+        drawTextAt(dc, font, text, x, y, color, TA_CENTER | TA_TOP);
     }
 
-    void fillRectColor(HDC dc, const RECT& rect, COLORREF color) {
+    // The splash title, lit only down to `litPercent` of its height so it can
+    // sputter on like a failing tube instead of simply appearing.
+    void drawSplashTitle(HDC dc, int width, int titleY, int titleHeight,
+                         int litPercent) const {
+        if (litPercent <= 0) return;
+        if (litPercent >= 100) {
+            drawTextCentered(dc, titleFont_, L"ANAISE", width / 2, titleY,
+                             kWhite);
+            return;
+        }
+        const int saved = SaveDC(dc);
+        IntersectClipRect(dc, 0, titleY, width,
+                          titleY + titleHeight * litPercent / 100);
+        drawTextCentered(dc, titleFont_, L"ANAISE", width / 2, titleY, kWhite);
+        RestoreDC(dc, saved);
+    }
+
+    void fillColor(HDC dc, const RECT& rect, COLORREF color) const {
         HBRUSH brush = CreateSolidBrush(color);
         FillRect(dc, &rect, brush);
         DeleteObject(brush);
     }
 
-    void drawLine(HDC dc, int x1, int y1, int x2, int y2, COLORREF color) {
-        HPEN pen = CreatePen(PS_SOLID, 1, color);
+    void strokeRect(HDC dc, const RECT& rect, COLORREF color,
+                    int thickness = 1) const {
+        HPEN pen = CreatePen(PS_SOLID, thickness, color);
+        HGDIOBJ oldPen = SelectObject(dc, pen);
+        HGDIOBJ oldBrush = SelectObject(dc, GetStockObject(NULL_BRUSH));
+        Rectangle(dc, rect.left, rect.top, rect.right, rect.bottom);
+        SelectObject(dc, oldBrush);
+        SelectObject(dc, oldPen);
+        DeleteObject(pen);
+    }
+
+    void drawLine(HDC dc, int x1, int y1, int x2, int y2) const {
+        HPEN pen = CreatePen(PS_SOLID, 1, kWhite);
         HGDIOBJ old = SelectObject(dc, pen);
         MoveToEx(dc, x1, y1, nullptr);
         LineTo(dc, x2, y2);
@@ -1042,109 +950,41 @@ private:
         DeleteObject(pen);
     }
 
-    std::vector<VisualLine> wrapBlocks(int cols) {
-        std::vector<VisualLine> lines;
-        if (cols < 8) cols = 8;
-
-        auto blockLength = [](const Block& block) {
-            size_t length = 0;
-            for (const auto& span : block.spans) length += span.text.size();
-            return length;
-        };
-
-        size_t index = 0;
-        while (index < log_.size()) {
-            if (log_[index].art) {
-                size_t end = index;
-                size_t widest = 0;
-                while (end < log_.size() && log_[end].art) {
-                    widest = std::max(widest, blockLength(log_[end]));
-                    ++end;
-                }
-                int indent = 0;
-                if (static_cast<int>(widest) < cols) {
-                    indent = (cols - static_cast<int>(widest)) / 2;
-                }
-                for (size_t i = index; i < end; ++i) {
-                    VisualLine line;
-                    line.art = true;
-                    std::wstring text(static_cast<size_t>(indent), L' ');
-                    for (const auto& span : log_[i].spans) text += span.text;
-                    if (!text.empty()) line.runs.push_back({text, Ink::Art});
-                    lines.push_back(std::move(line));
-                }
-                index = end;
-                continue;
+    void drawLogo(HDC dc, int left, int top, int cell) const {
+        HBRUSH brush = CreateSolidBrush(kWhite);
+        for (int row = 0; row < kLogoGrid; ++row) {
+            for (int col = 0; col < kLogoGrid; ++col) {
+                if (kLogo[row][col] != L'#') continue;
+                RECT pixel{left + col * cell, top + row * cell,
+                           left + (col + 1) * cell, top + (row + 1) * cell};
+                FillRect(dc, &pixel, brush);
             }
-
-            std::vector<Cell> cells;
-            for (const auto& span : log_[index].spans) {
-                for (wchar_t ch : span.text) cells.push_back({ch, span.ink});
-            }
-            if (cells.empty()) {
-                lines.push_back(VisualLine{});
-                ++index;
-                continue;
-            }
-
-            size_t position = 0;
-            bool firstSegment = true;
-            while (position < cells.size()) {
-                if (!firstSegment) {
-                    while (position < cells.size() && cells[position].ch == L' ') {
-                        ++position;
-                    }
-                    if (position >= cells.size()) break;
-                }
-
-                size_t remaining = cells.size() - position;
-                size_t lineEnd = 0;
-                if (remaining <= static_cast<size_t>(cols)) {
-                    lineEnd = cells.size();
-                } else {
-                    size_t limit = position + static_cast<size_t>(cols);
-                    size_t breakAt = limit;
-                    while (breakAt > position && cells[breakAt - 1].ch != L' ') {
-                        --breakAt;
-                    }
-                    lineEnd = breakAt > position ? breakAt : limit;
-                }
-
-                size_t contentEnd = lineEnd;
-                while (contentEnd > position && cells[contentEnd - 1].ch == L' ') {
-                    --contentEnd;
-                }
-                if (contentEnd == position && lineEnd > position) {
-                    contentEnd = position + 1;
-                }
-
-                VisualLine line;
-                for (size_t i = position; i < contentEnd; ++i) {
-                    if (!line.runs.empty() && line.runs.back().ink == cells[i].ink) {
-                        line.runs.back().text.push_back(cells[i].ch);
-                    } else {
-                        line.runs.push_back({std::wstring(1, cells[i].ch),
-                                             cells[i].ink});
-                    }
-                }
-                lines.push_back(std::move(line));
-
-                position = lineEnd;
-                while (position < cells.size() && cells[position].ch == L' ') {
-                    ++position;
-                }
-                firstSegment = false;
-            }
-            ++index;
         }
-        return lines;
+        DeleteObject(brush);
+    }
+
+    void drawHeader(HDC dc, int width, const std::wstring& title,
+                    HFONT titleFont, int logoCell, int& ruleY,
+                    int& titleY) {
+        const int scale = static_cast<int>(dpi_);
+        const int margin = MulDiv(34, scale, 96);
+        const int logoPixels = logoCell * kLogoGrid;
+        drawLogo(dc, margin, margin, logoCell);
+
+        const int fontHeight = textHeight(dc, titleFont);
+        const int textX = margin + logoPixels + MulDiv(22, scale, 96);
+        titleY = margin + (logoPixels - fontHeight) / 2;
+        drawTextAt(dc, titleFont, title, textX, titleY, kWhite);
+
+        ruleY = margin + logoPixels + MulDiv(20, scale, 96);
+        drawLine(dc, margin, ruleY, width - margin, ruleY);
     }
 
     void paint(HDC screen) {
         RECT client{};
         GetClientRect(hwnd_, &client);
-        int width = client.right;
-        int height = client.bottom;
+        const int width = client.right;
+        const int height = client.bottom;
         if (width <= 0 || height <= 0) return;
 
         HDC dc = CreateCompatibleDC(screen);
@@ -1152,263 +992,223 @@ private:
         HGDIOBJ oldBitmap = SelectObject(dc, bitmap);
         SetBkMode(dc, TRANSPARENT);
 
-        TRIVERTEX vertices[2] = {
-            {0, 0, static_cast<COLOR16>(GetRValue(kBgTop) << 8),
-             static_cast<COLOR16>(GetGValue(kBgTop) << 8),
-             static_cast<COLOR16>(GetBValue(kBgTop) << 8), 0},
-            {width, height, static_cast<COLOR16>(GetRValue(kBgBottom) << 8),
-             static_cast<COLOR16>(GetGValue(kBgBottom) << 8),
-             static_cast<COLOR16>(GetBValue(kBgBottom) << 8), 0}};
-        GRADIENT_RECT gradient{0, 1};
-        if (!GradientFill(dc, vertices, 2, &gradient, 1, GRADIENT_FILL_RECT_V)) {
-            RECT all{0, 0, width, height};
-            fillRectColor(dc, all, kBgBottom);
+        RECT all{0, 0, width, height};
+        fillColor(dc, all, kBlack);
+
+        ensureFonts();
+
+        switch (screen_) {
+            case Screen::Splash:
+                paintSplash(dc, width, height);
+                break;
+            case Screen::Menu:
+                paintMenu(dc, width, height);
+                break;
+            case Screen::Library:
+                paintLibrary(dc, width);
+                break;
+            case Screen::Paint:
+                paintPaintScreen(dc, width, height);
+                break;
         }
 
-        ensureFont(dc);
-        HGDIOBJ oldFont = SelectObject(dc, font_);
-
-        TEXTMETRICW metrics{};
-        GetTextMetricsW(dc, &metrics);
-        cellH_ = metrics.tmHeight + MulDiv(5, static_cast<int>(dpi_), 96);
-        SIZE cell = measure(dc, L"M");
-        cellW_ = std::max(1, static_cast<int>(cell.cx));
-
-        const int scale = MulDiv(1, static_cast<int>(dpi_), 96);
-        const int margin = MulDiv(26, static_cast<int>(dpi_), 96);
-
-        int contentW = width - 2 * margin;
-        int maxCols = fullscreen_ ? 128 : 112;
-        contentW = std::min(contentW, maxCols * cellW_);
-        if (contentW < 20 * cellW_) contentW = std::max(cellW_ * 20, width - 2 * margin / 2);
-        int contentX = (width - contentW) / 2;
-        if (contentX < margin) contentX = margin;
-
-        int topY = margin;
-        int storyTop = topY + cellH_ + 14 * scale;
-        int storyBottom = height - margin - cellH_ * 3 - 40 * scale;
-        if (storyBottom < storyTop + cellH_ * 3) {
-            storyBottom = storyTop + cellH_ * 3;
-        }
-
-        int scrollReserve = 16 * scale;
-        int textW = std::max(20 * cellW_, contentW - scrollReserve);
-        int cols = std::max(20, textW / cellW_);
-        int rows = std::max(3, (storyBottom - storyTop) / cellH_);
-
-        std::vector<VisualLine> lines = wrapBlocks(cols);
-        totalLines_ = static_cast<int>(lines.size());
-        visibleLines_ = rows;
-        maxScroll_ = std::max(0, totalLines_ - rows);
-        scroll_ = std::max(0, std::min(maxScroll_, scroll_));
-        int startLine = std::max(0, totalLines_ - rows - scroll_);
-
-        storyRect_ = {contentX - 6 * scale, storyTop - 4 * scale,
-                      contentX + textW + 6 * scale, storyBottom + 4 * scale};
-
-        // ---- header
-        int y = topY;
-        const std::wstring title = L"T H E   H O L L O W   S P I R E";
-        drawText(dc, contentX, y, title, kInkAccent);
-        SIZE titleSize = measure(dc, title);
-        const std::wstring subtitle = L"/  an ASCII adventure";
-        SIZE subtitleSize = measure(dc, subtitle);
-        if (titleSize.cx + subtitleSize.cx + 20 * scale < contentW) {
-            drawText(dc, contentX + titleSize.cx + 2 * cellW_, y, subtitle,
-                     kInkDim);
-        }
-        std::wstring hint = fullscreen_
-            ? L"F11 / ESC  LEAVE FULLSCREEN"
-            : L"F1 HELP   F11 FULLSCREEN";
-        SIZE hintSize = measure(dc, hint);
-        int used = titleSize.cx + 2 * cellW_ + subtitleSize.cx;
-        if (used + hintSize.cx + 40 * scale < contentW) {
-            drawRight(dc, contentX + contentW, y, hint, kInkDim);
-        }
-
-        int ruleY = topY + cellH_ + 6 * scale;
-        drawLine(dc, contentX, ruleY, contentX + contentW, ruleY, kBorder);
-        drawLine(dc, contentX, ruleY, contentX + std::min(contentW, 200 * scale),
-                 ruleY, kBorderBright);
-
-        // ---- story
-        int clip = SaveDC(dc);
-        IntersectClipRect(dc, storyRect_.left, storyRect_.top, storyRect_.right,
-                          storyRect_.bottom);
-        y = storyTop;
-        for (int row = 0; row < rows && startLine + row < totalLines_;
-             ++row, y += cellH_) {
-            const VisualLine& line = lines[startLine + row];
-            int x = contentX;
-            for (const auto& run : line.runs) {
-                drawText(dc, x, y, run.text, inkColor(run.ink));
-                x += static_cast<int>(run.text.size()) * cellW_;
-            }
-        }
-        RestoreDC(dc, clip);
-
-        // ---- scrollbar
-        scrollTrackHit_ = {};
-        scrollTrackHeight_ = 0;
-        scrollThumbHeight_ = 0;
-        storyTop_ = storyTop;
-        if (totalLines_ > rows) {
-            int trackX = contentX + contentW - 4 * scale;
-            drawLine(dc, trackX, storyTop, trackX, storyBottom, kBorder);
-            int trackHeight = storyBottom - storyTop;
-            int thumbHeight = std::max(24 * scale,
-                                       trackHeight * rows / std::max(1, totalLines_));
-            int thumbTravel = std::max(1, trackHeight - thumbHeight);
-            int thumbOffset = maxScroll_ > 0
-                ? thumbTravel * startLine / maxScroll_
-                : 0;
-            RECT thumb{trackX - 1, storyTop + thumbOffset, trackX + 3 * scale,
-                       storyTop + thumbOffset + thumbHeight};
-            fillRectColor(dc, thumb, kInkArt);
-            scrollTrackHit_ = {trackX - 8 * scale, storyTop,
-                               trackX + 10 * scale, storyBottom};
-            scrollTrackHeight_ = trackHeight;
-            scrollThumbHeight_ = thumbHeight;
-        }
-
-        // ---- status
-        int inputH = cellH_ + 14 * scale;
-        int inputTop = height - margin - inputH;
-        int statusY = inputTop - cellH_ - 8 * scale;
-        int statusRuleY = statusY - 8 * scale;
-        drawLine(dc, contentX, statusRuleY, contentX + contentW, statusRuleY, kBorder);
-
-        std::wstring room = game_.gameOver() ? L"The End" : game_.location();
-        drawText(dc, contentX, statusY, room,
-                 game_.gameOver() ? kInkDim : kInkRoom);
-        SIZE roomSize = measure(dc, room);
-        std::wstring stats = L"  |  steps " + std::to_wstring(game_.moves()) +
-                             L"  |  score " + std::to_wstring(game_.score()) +
-                             L"  |  carrying " +
-                             std::to_wstring(game_.carried());
-        if (roomSize.cx + 20 * scale < contentW) {
-            drawText(dc, contentX + roomSize.cx, statusY, stats, kInkDim);
-        }
-        std::wstring rightHint = flash_.empty()
-            ? L"type HELP or press F1"
-            : flash_;
-        SIZE statsSize = measure(dc, stats);
-        SIZE rightSize = measure(dc, rightHint);
-        if (roomSize.cx + statsSize.cx + rightSize.cx + 60 * scale < contentW) {
-            drawRight(dc, contentX + contentW, statusY, rightHint,
-                      flash_.empty() ? kInkDim : kInkGood);
-        }
-
-        // ---- input line
-        RECT inputRect{contentX, inputTop, contentX + contentW, inputTop + inputH};
-        inputRect_ = inputRect;
-        HBRUSH panelBrush = CreateSolidBrush(kPanel);
-        HPEN inputPen = CreatePen(PS_SOLID, 1,
-                                  focused_ ? kBorderBright : kBorder);
-        HGDIOBJ oldBrush = SelectObject(dc, panelBrush);
-        HGDIOBJ oldPen = SelectObject(dc, inputPen);
-        RoundRect(dc, inputRect.left, inputRect.top, inputRect.right,
-                  inputRect.bottom, 10 * scale, 10 * scale);
-        SelectObject(dc, oldBrush);
-        SelectObject(dc, oldPen);
-        DeleteObject(panelBrush);
-        DeleteObject(inputPen);
-
-        int padX = 12 * scale;
-        int promptWidth = 2 * cellW_;
-        int textX = inputRect.left + padX + promptWidth;
-        int textY = inputTop + (inputH - cellH_) / 2 + 2 * scale;
-        inputTextX_ = textX;
-        drawText(dc, inputRect.left + padX, textY, L">", kInkAccent);
-
-        int availableForText = inputRect.right - padX - textX;
-        int visibleChars = std::max(1, availableForText / cellW_);
-        if (static_cast<int>(caret_) < inputViewStart_) {
-            inputViewStart_ = static_cast<int>(caret_);
-        }
-        if (static_cast<int>(caret_) > inputViewStart_ + visibleChars - 1) {
-            inputViewStart_ = static_cast<int>(caret_) - visibleChars + 1;
-        }
-        int maxView = std::max(0, static_cast<int>(input_.size()) - visibleChars);
-        inputViewStart_ = std::max(0, std::min(inputViewStart_, maxView));
-
-        if (input_.empty()) {
-            if (!focused_) {
-                drawText(dc, textX, textY, L"type a command... (help)", kInkDim);
-            }
-        } else {
-            std::wstring visible =
-                input_.substr(static_cast<size_t>(inputViewStart_),
-                              static_cast<size_t>(visibleChars));
-            drawText(dc, textX, textY, visible, kInkText);
-        }
-
-        if (focused_ && caretOn_) {
-            int caretX = textX + (static_cast<int>(caret_) - inputViewStart_) * cellW_;
-            RECT caretRect{caretX, textY + 1, caretX + std::max(1, 2 * scale),
-                           textY + cellH_ - 2};
-            if (caretRect.left < inputRect.right - padX) {
-                fillRectColor(dc, caretRect, kInkAccent);
-            }
-        }
-
-        SelectObject(dc, oldFont);
         BitBlt(screen, 0, 0, width, height, dc, 0, 0, SRCCOPY);
         SelectObject(dc, oldBitmap);
         DeleteObject(bitmap);
         DeleteDC(dc);
     }
 
+    void paintSplash(HDC dc, int width, int height) {
+        const DotArt& art = seraphimArt();
+        const int scale = static_cast<int>(dpi_);
+        const int margin = MulDiv(34, scale, 96);
+        const int titleHeight = textHeight(dc, titleFont_);
+        const int titleBlock = titleHeight + MulDiv(42, scale, 96);
+        const int maxArtHeight =
+            std::max(1, height - margin * 2 - titleBlock - MulDiv(50, scale, 96));
+        const int maxArtWidth = std::max(1, width - margin * 2);
+        // Dots sit on a square pitch that need not be a whole number of pixels,
+        // so the angel fills whatever room the window leaves for it.
+        const double pitch = std::max(
+            1.0, std::min(static_cast<double>(maxArtWidth) / std::max(1, art.cols),
+                          static_cast<double>(maxArtHeight) / std::max(1, art.rows)));
+        const int artWidth = static_cast<int>(std::lround(art.cols * pitch));
+        const int artHeight = static_cast<int>(std::lround(art.rows * pitch));
+        const int artLeft = (width - artWidth) / 2;
+        const int groupHeight = artHeight + MulDiv(28, scale, 96) + titleBlock;
+        const int artTop = std::max(margin, (height - groupHeight) / 2);
+        const int titleY = artTop + artHeight + MulDiv(28, scale, 96);
+
+        const ULONGLONG elapsed = GetTickCount64() - splashStart_;
+        std::size_t visible = art.order.size();
+        if (elapsed < kSplashRevealMs) {
+            visible = static_cast<std::size_t>(
+                art.order.size() * elapsed / kSplashRevealMs);
+        }
+        if (visible > art.order.size()) visible = art.order.size();
+
+        // A dot has to be at least one whole pixel: a one-pixel ellipse is
+        // degenerate and GDI draws nothing at all, so small dots are squares.
+        const int dotSize =
+            std::max(1, static_cast<int>(std::lround(pitch * 0.62)));
+        HBRUSH brush = CreateSolidBrush(kWhite);
+        HPEN pen = CreatePen(PS_SOLID, 1, kWhite);
+        HGDIOBJ oldBrush = SelectObject(dc, brush);
+        HGDIOBJ oldPen = SelectObject(dc, pen);
+        for (std::size_t i = 0; i < visible; ++i) {
+            const auto& dot = art.order[i];
+            const int centerX =
+                artLeft + static_cast<int>(std::lround((dot.second + 0.5) * pitch));
+            const int centerY =
+                artTop + static_cast<int>(std::lround((dot.first + 0.5) * pitch));
+            if (dotSize >= 3) {
+                const int left = centerX - dotSize / 2;
+                const int top = centerY - dotSize / 2;
+                Ellipse(dc, left, top, left + dotSize - 1, top + dotSize - 1);
+            } else {
+                RECT pixel{centerX - dotSize / 2, centerY - dotSize / 2,
+                           centerX - dotSize / 2 + dotSize,
+                           centerY - dotSize / 2 + dotSize};
+                FillRect(dc, &pixel, brush);
+            }
+        }
+        SelectObject(dc, oldPen);
+        SelectObject(dc, oldBrush);
+        DeleteObject(pen);
+        DeleteObject(brush);
+
+        // The angel arrives on its own and holds for a beat; only then does the
+        // title start to sputter.
+        const ULONGLONG flickerStart = kSplashRevealMs + kSplashTitleDelayMs;
+        const ULONGLONG flickerEnd = flickerStart + titleFlickerMs();
+        if (elapsed >= flickerStart) {
+            const int lit = elapsed >= flickerEnd
+                                ? 100
+                                : litTitlePercent(elapsed - flickerStart);
+            drawSplashTitle(dc, width, titleY, titleHeight, lit);
+        }
+    }
+
+    void paintMenu(HDC dc, int width, int height) {
+        const int scale = static_cast<int>(dpi_);
+        const int logoCell = std::max(2, MulDiv(5, scale, 96));
+        int ruleY = 0;
+        int titleY = 0;
+        drawHeader(dc, width, L"ANAISE", titleFont_, logoCell, ruleY, titleY);
+
+        for (int i = 0; i < kMenuItems; ++i) {
+            const RECT item = menuItemRect(i, width, height);
+            const std::wstring label = kMenuLabels[i];
+            const int labelHeight = textHeight(dc, bodyFont_);
+            const int labelY =
+                item.top + (item.bottom - item.top - labelHeight) / 2;
+            if (i == menuIndex_) {
+                fillColor(dc, item, kWhite);
+                drawTextCentered(dc, bodyFont_, label, (item.left + item.right) / 2,
+                                 labelY, kBlack);
+            } else {
+                strokeRect(dc, item, kWhite, 1);
+                drawTextCentered(dc, bodyFont_, label, (item.left + item.right) / 2,
+                                 labelY, kWhite);
+            }
+        }
+    }
+
+    void paintLibrary(HDC dc, int width) {
+        const int scale = static_cast<int>(dpi_);
+        const int logoCell = std::max(2, MulDiv(5, scale, 96));
+        int ruleY = 0;
+        int titleY = 0;
+        drawHeader(dc, width, L"THE EMPTY LIBRARY", titleFont_, logoCell, ruleY,
+                   titleY);
+    }
+
+    void paintPaintScreen(HDC dc, int width, int height) {
+        const int scale = static_cast<int>(dpi_);
+        const int margin = MulDiv(34, scale, 96);
+        const int logoCell = std::max(2, MulDiv(4, scale, 96));
+        int ruleY = 0;
+        int titleY = 0;
+        drawHeader(dc, width, L"PIXEL PAINT", headingFont_, logoCell, ruleY,
+                   titleY);
+
+        const std::wstring brushStatus =
+            L"BRUSH " + std::to_wstring(paintBrush_);
+        const int statusHeight = textHeight(dc, smallFont_);
+        drawTextAt(dc, smallFont_, brushStatus, width - margin,
+                   ruleY - MulDiv(22, scale, 96) - statusHeight, kWhite,
+                   TA_RIGHT | TA_TOP);
+
+        const GridLayout layout = paintLayout(width, height);
+        const int gridWidth = layout.cell * kPaintCols;
+        const int gridHeight = layout.cell * kPaintRows;
+        const RECT border{layout.left, layout.top, layout.left + gridWidth,
+                          layout.top + gridHeight};
+        strokeRect(dc, border, kWhite, 1);
+
+        const int inset = layout.cell >= 8 ? 1 : 0;
+        HBRUSH whiteBrush = CreateSolidBrush(kWhite);
+        for (int row = 0; row < kPaintRows; ++row) {
+            for (int col = 0; col < kPaintCols; ++col) {
+                if (!canvas_[row][col]) continue;
+                RECT cell{layout.left + col * layout.cell + inset,
+                          layout.top + row * layout.cell + inset,
+                          layout.left + (col + 1) * layout.cell - inset,
+                          layout.top + (row + 1) * layout.cell - inset};
+                FillRect(dc, &cell, whiteBrush);
+            }
+        }
+        DeleteObject(whiteBrush);
+
+        if (hoverValid_) {
+            const int start = -(paintBrush_ - 1) / 2;
+            const int firstCol = std::max(0, hoverCol_ + start);
+            const int firstRow = std::max(0, hoverRow_ + start);
+            const int lastCol =
+                std::min(kPaintCols - 1, hoverCol_ + start + paintBrush_ - 1);
+            const int lastRow =
+                std::min(kPaintRows - 1, hoverRow_ + start + paintBrush_ - 1);
+            RECT hover{layout.left + firstCol * layout.cell + 1,
+                       layout.top + firstRow * layout.cell + 1,
+                       layout.left + (lastCol + 1) * layout.cell - 1,
+                       layout.top + (lastRow + 1) * layout.cell - 1};
+            strokeRect(dc, hover,
+                       canvas_[hoverRow_][hoverCol_] ? kBlack : kWhite, 2);
+        }
+    }
+
     // --------------------------------------------------------------- members
     HWND hwnd_ = nullptr;
     HINSTANCE instance_ = nullptr;
-    HMENU menu_ = nullptr;
+    HANDLE embeddedFont_ = nullptr;
 
-    Game game_;
-    std::vector<Block> log_;
-    std::wstring input_;
-    size_t caret_ = 0;
-    std::vector<std::wstring> history_;
-    int historyPos_ = -1;
-    std::wstring draft_;
-
-    bool caretOn_ = true;
-    bool focused_ = false;
     UINT dpi_ = 96;
-    int fontPt_ = 12;
-    HFONT font_ = nullptr;
-    UINT fontDpi_ = 0;
-    int fontPtCached_ = 0;
-
-    int cellW_ = 8;
-    int cellH_ = 18;
-    int scroll_ = 0;
-    int maxScroll_ = 0;
-    int totalLines_ = 0;
-    int visibleLines_ = 0;
-
-    RECT storyRect_{};
-    RECT inputRect_{};
-    int storyTop_ = 0;
-    RECT scrollTrackHit_{};
-    int scrollTrackHeight_ = 0;
-    int scrollThumbHeight_ = 0;
-    bool draggingScroll_ = false;
-    int inputTextX_ = 0;
-    int inputViewStart_ = 0;
-
-    bool tabActive_ = false;
-    size_t tabStart_ = 0;
-    std::wstring tabPrefix_;
-    std::vector<std::wstring> tabCandidates_;
-    size_t tabIndex_ = 0;
-
-    std::wstring flash_;
-    ULONGLONG flashUntil_ = 0;
+    HFONT titleFont_ = nullptr;
+    HFONT headingFont_ = nullptr;
+    HFONT bodyFont_ = nullptr;
+    HFONT smallFont_ = nullptr;
+    UINT fontsDpi_ = 0;
 
     bool fullscreen_ = false;
     WINDOWPLACEMENT placement_{};
     LONG windowedStyle_ = 0;
+
+    Screen screen_ = Screen::Splash;
+    ULONGLONG splashStart_ = 0;
+    int menuIndex_ = 0;
+
+    std::array<std::array<bool, kPaintCols>, kPaintRows> canvas_{};
+    std::vector<std::array<std::array<bool, kPaintCols>, kPaintRows>> undo_;
+    int paintBrush_ = 1;
+    bool painting_ = false;
+    bool erasing_ = false;
+    bool lastPaintValid_ = false;
+    int lastPaintCol_ = 0;
+    int lastPaintRow_ = 0;
+    bool hoverValid_ = false;
+    int hoverCol_ = 0;
+    int hoverRow_ = 0;
+    bool mouseTracking_ = false;
 };
 
 }  // namespace
@@ -1417,11 +1217,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int) {
     enableDpiAwareness();
 
     App app;
-    if (!app.create(instance)) {
-        MessageBoxW(nullptr, L"The window could not be created.",
-                    L"The Hollow Spire", MB_OK | MB_ICONERROR);
-        return 1;
-    }
+    if (!app.create(instance)) return 1;
 
     MSG message;
     while (GetMessageW(&message, nullptr, 0, 0) > 0) {

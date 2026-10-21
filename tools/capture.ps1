@@ -1,7 +1,7 @@
 # Development helper: activate a window by title and save a PNG of it.
-#   powershell -ExecutionPolicy Bypass -File tools/capture.ps1 -Title "The Hollow Spire" -Out shot.png
+#   powershell -ExecutionPolicy Bypass -File tools/capture.ps1 -Title "Anaise" -Out shot.png
 param(
-    [string]$Title = "The Hollow Spire",
+    [string]$Title = "Anaise",
     [string]$Out = "shot.png",
     [int]$WaitMs = 400
 )
@@ -15,6 +15,7 @@ public static class Win32Shot {
     public struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)]
     public struct POINT { public int X, Y; }
+    [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
@@ -22,6 +23,9 @@ public static class Win32Shot {
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hWnd, ref POINT point);
 }
 "@
+
+# Match the target app's per-monitor DPI awareness so screen coordinates line up.
+[void][Win32Shot]::SetProcessDpiAwarenessContext([IntPtr](-4))
 
 $process = Get-Process | Where-Object { $_.MainWindowTitle -like "*$Title*" } | Select-Object -First 1
 if (-not $process) {

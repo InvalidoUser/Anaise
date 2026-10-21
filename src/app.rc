@@ -1,10 +1,14 @@
 #include <windows.h>
 
-/* Application icon */
-101 ICON "assets/tower.ico"
+/* Application icon: 10x10 black-and-white pixel art */
+101 ICON "assets/library.ico"
 
-/* Per-monitor DPI awareness and common controls version 6 */
-1 24 "src/app.manifest"
+/* Title typeface: Squealer, CC0 1.0 (assets/fonts) */
+102 RCDATA "assets/fonts/squealer.otf"
+
+/* The application manifest is left to the linker's default: MinGW's ld always
+   embeds one and cannot merge another, and the app sets per-monitor DPI
+   awareness at startup with SetProcessDpiAwarenessContext. */
 
 1 VERSIONINFO
 FILEVERSION 1,0,0,0
@@ -19,11 +23,11 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileDescription", "The Hollow Spire - an ASCII text adventure\0"
+            VALUE "FileDescription", "Anaise - a black and white game library\0"
             VALUE "FileVersion", "1.0.0.0\0"
-            VALUE "InternalName", "HollowSpire\0"
-            VALUE "OriginalFilename", "HollowSpire.exe\0"
-            VALUE "ProductName", "The Hollow Spire\0"
+            VALUE "InternalName", "Anaise\0"
+            VALUE "OriginalFilename", "Anaise.exe\0"
+            VALUE "ProductName", "Anaise\0"
             VALUE "ProductVersion", "1.0.0.0\0"
             VALUE "LegalCopyright", "Released into the public domain\0"
         END

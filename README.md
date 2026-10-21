@@ -1,45 +1,42 @@
-# The Hollow Spire
+# Anaise
 
-An ASCII text adventure in a native Windows window.
+A small black-and-white game library in a native Windows window. Anaise opens
+on a dot-art seraphim startup screen, then a main menu with two rooms: an empty
+library and a pixel paint canvas.
 
-You are a lamplighter sent up the old pilgrim road to discover why the beacon
-of the Hollow Spire has been dark for thirty years. Explore eight rooms, solve
-the tower's small mysteries, and decide what to do with the light at the top.
-
-The whole app is a real Win32 desktop program written in C++ with no engine,
-no runtime bundle, and no network access. Every letter is drawn with GDI.
+The palette is strictly black and white, the logo is 10x10 pixel art, and
+nothing is written to disk.
 
 ## Features
 
-- Native resizable window, menu bar, minimise/maximise, snap layouts, taskbar icon
+- Pure black (`#000000`) and white (`#FFFFFF`) throughout
+- Seraphim startup screen drawn as a field of dots, revealed outward from the
+  centre, then the title sputters on like a failing tube
+- Main menu with keyboard and mouse navigation
+- **The Empty Library**: a quiet room with empty shelves and nothing to do
+- **Pixel Paint**: a 32x32 monochrome canvas with brush sizes, erasing, undo and
+  clear
+- 10x10 pixel-art bookshelf logo, used both in the window and as the app icon
+- Titles set in Squealer, a CC0 blackletter typeface embedded in the executable
+- Native resizable window, dark title bar, minimise/maximise, snap layouts,
+  taskbar icon
 - `F11` or `Alt+Enter` true fullscreen, `Esc` to leave it
 - `Alt+F4` closes, as a Windows app should
-- Scrolling story with mouse wheel, Page Up/Down, and a draggable scrollbar
-- Command history with Up/Down, Tab completion, click-to-place caret
-- Save and load to `%APPDATA%\HollowSpire\chronicle.save`
-- Window size, maximised state, and text size remembered
-- Per-monitor DPI awareness, dark title bar, drawn scanline-free CRT palette
-- Clipboard copy/paste and a built-in command reference
-- Nine ASCII room illustrations, four endings, and a small secret or two
+- Per-monitor DPI awareness
+- No engine, no runtime bundle, no network access, no saved data
 
-## Controls
+## Startup art
 
-| Key | Action |
-| --- | --- |
-| `F1` | Command reference |
-| `F2` | New game |
-| `F5` / `F9` | Save / load |
-| `F11`, `Alt+Enter` | Toggle fullscreen |
-| `Esc` | Leave fullscreen, or clear the input line |
-| `Alt+F4` | Close the window |
-| `Ctrl+C` | Copy the transcript |
-| `Ctrl+V` / `Shift+Insert` | Paste |
-| `Ctrl+L` | Clear scrollback |
-| `Ctrl+Plus` / `Ctrl+Minus` | Larger / smaller text |
-| `Page Up/Down` | Scroll the story |
-| `Up` / `Down` | Command history |
-| `Tab` | Complete the current word |
-| Mouse wheel / scrollbar | Scroll the story |
+The seraphim is a 114 x 57 Braille drawing (supplied as `angel.txt`) embedded
+in `src/angel_art.h`. Each Braille cell encodes a 2 x 4 block of dots, so the
+splash decodes the raised dots into a 228 x 228 field, trims the empty border,
+and renders every dot as a white dot. The Braille glyphs themselves are never
+drawn.
+
+Once the last dot lands the angel holds the screen on its own for a moment, then
+the `ANAISE` title ignites like a failing fluorescent tube: a short, fixed
+sequence of dark, partly lit and fully lit frames before it stays on. The splash
+leaves for the main menu on its own; a key or a click skips it.
 
 ## Build
 
@@ -50,40 +47,39 @@ build.bat
 run.bat
 ```
 
-The executable is written to `bin\HollowSpire.exe`. It is linked statically
-against the C++ runtime, so it needs no MinGW DLLs at run time.
+The executable is written to `bin\Anaise.exe`. It is linked statically against
+the C++ runtime, so it needs no MinGW DLLs at run time.
 
-To regenerate the icon:
+To regenerate the 10x10 icon:
 
 ```bat
 powershell -ExecutionPolicy Bypass -File tools\make_icon.ps1
 ```
 
-## Tests
-
-The story logic has a scripted playthrough test:
+To put a shortcut to the built app on your desktop:
 
 ```bat
-tests\run_tests.bat
+powershell -ExecutionPolicy Bypass -File tools\make_shortcut.ps1
 ```
 
-It uses a temporary APPDATA folder, so running it does not touch your real
-save file.
-
-## A gentle hint
-
-The gate, the gatehouse, and the hall are a good first loop. If you find a
-bell, ring it where the ghost is. If a cabinet is locked, look downstairs.
-The observatory answers to a name, not a command.
+The shortcut points at `bin\Anaise.exe` and uses the icon embedded in it, so
+it keeps working as long as the repository stays where it is.
 
 ## Layout
 
 ```
-src/main.cpp    Win32 window, GDI renderer, input, menus, fullscreen
-src/game.cpp    world, parser, puzzles, story, save/load
-src/game.h      shared output and game interface
-src/app.rc      icon, version info, manifest
-assets/         generated application icon
-tools/          icon generator and development helpers
-tests/          scripted playthrough test
+src/main.cpp       Win32 window, menu, startup art, library and pixel paint
+src/angel_art.h    Braille seraphim source art
+src/app.rc         icon, embedded title font, version info
+assets/             generated 10x10 pixel-art icon
+assets/fonts/       Squealer (CC0 1.0) title typeface and its licence
+tools/              icon generator and development helpers
 ```
+
+## Font
+
+The title uses [Squealer](https://www.dafont.com/squealer.font) by Raymond
+Larabie (Typodermic Fonts), released under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The `.otf` is
+compiled into `Anaise.exe` as a resource and registered at startup, so nothing
+has to be installed. See `assets/fonts/squealer-LICENSE.txt`.

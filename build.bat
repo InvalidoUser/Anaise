@@ -1,5 +1,5 @@
 @echo off
-rem Build The Hollow Spire with MinGW-w64 (g++ and windres on PATH).
+rem Build Anaise with MinGW-w64 (g++ and windres on PATH).
 setlocal
 cd /d "%~dp0"
 
@@ -12,12 +12,14 @@ if not exist bin mkdir bin
 echo [1/2] compiling resources...
 windres src\app.rc -O coff -o build\app.res || exit /b 1
 
-echo [2/2] compiling the game...
+echo [2/2] compiling the window...
 g++ -std=c++20 -O2 -municode -mwindows ^
-    src\main.cpp src\game.cpp build\app.res ^
-    -o bin\HollowSpire.exe ^
+    -finput-charset=UTF-8 -fexec-charset=UTF-8 ^
+    src\main.cpp build\app.res ^
+    -o bin\Anaise.exe ^
     -static -static-libgcc -static-libstdc++ ^
-    -lgdi32 -luser32 -lshell32 -lmsimg32 -ldwmapi -lole32 || exit /b 1
+    -lgdi32 -luser32
+if errorlevel 1 exit /b 1
 
 echo.
-echo Built bin\HollowSpire.exe
+echo Built bin\Anaise.exe

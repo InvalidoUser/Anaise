@@ -1,9 +1,9 @@
 @echo off
-rem Launch the built game.
+rem Launch the built app.
 setlocal
 cd /d "%~dp0"
-if not exist bin\HollowSpire.exe (
-    echo [error] bin\HollowSpire.exe is missing. Run build.bat first.
+if not exist bin\Anaise.exe (
+    echo [error] bin\Anaise.exe is missing. Run build.bat first.
     exit /b 1
 )
-start "" bin\HollowSpire.exe %*
+start "" bin\Anaise.exe %*
