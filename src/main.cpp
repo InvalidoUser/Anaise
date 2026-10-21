@@ -572,6 +572,7 @@ struct HeadlessOptions {
     int browserPage = 0;
     // Headless resource check: parse the embedded tracks without a device.
     bool checkAudio = false;
+    bool checkWindows = false;
 };
 
 std::vector<std::wstring> splitCommandLine(const wchar_t* commandLine) {
@@ -690,6 +691,10 @@ bool parseHeadlessOptions(const wchar_t* commandLine, HeadlessOptions& options) 
             options.walkProgress = static_cast<double>(percent) / 100.0;
             continue;
         }
+        if (arg == L"--check-windows") {
+            options.checkWindows = true;
+            continue;
+        }
         if (arg == L"--check-audio") {
             options.checkAudio = true;
             continue;
@@ -760,7 +765,7 @@ public:
         applyMonochromeTitleBar(hwnd_);
         ShowWindow(hwnd_, SW_SHOW);
         UpdateWindow(hwnd_);
-        SetFocus(hwnd_);
+        if (hwnd_) SetFocus(hwnd_);
 
         splashStart_ = GetTickCount64();
         SetTimer(hwnd_, kSplashTimer, 33, nullptr);
@@ -791,7 +796,11 @@ public:
                            const std::wstring& path, int walkDir = -1,
                            double walkProgress = 0.5, int browserPage = 0) {
         if (!headless_) return false;
-        screen_ = screen;
+        appWindows_ = {};
+        windowOrder_ = {0, 1, 2};
+        screen_ = Screen::Menu;
+        if (screen == Screen::Splash) screen_ = screen;
+        else if (screen != Screen::Menu) openScreen(screen);
         headlessNowMs_ = timeMs;
         splashStart_ = 0;
         browserPage_ = std::clamp(browserPage, 0, kBrowserPages - 1);
@@ -849,6 +858,93 @@ public:
         return ok;
     }
 
+    bool checkWindowInteractions() {
+        if (!headless_) return false;
+        enterMenu();
+        for (const auto& app : appWindows_) if (app.open) return false;
+        auto click = [&](RECT r) {
+            onMouseDown(true, (r.left + r.right) / 2, (r.top + r.bottom) / 2);
+            onMouseUp();
+        };
+        RECT icon = menuLayout(headlessWidth_, headlessHeight_).iconHit[0];
+        int iconX = (icon.left + icon.right) / 2;
+        int iconY = (icon.top + icon.bottom) / 2;
+        onMouseDown(true, iconX, iconY);
+        onMouseMove(iconX + px(200), iconY + px(10));
+        onMouseUp();
+        RECT movedIcon = menuLayout(headlessWidth_, headlessHeight_).iconHit[0];
+        if (movedIcon.left != icon.left + px(200) ||
+            movedIcon.top != icon.top + px(10) || appWindows_[0].open ||
+            menuHitAt(iconX + px(200), iconY + px(10)).index != 0) return false;
+        // Losing capture must cancel a press instead of launching its app.
+        RECT painterIcon = menuLayout(headlessWidth_, headlessHeight_).iconHit[1];
+        onMouseDown(true, (painterIcon.left + painterIcon.right) / 2,
+                          (painterIcon.top + painterIcon.bottom) / 2);
+        handleMessage(WM_CAPTURECHANGED, 0, 0);
+        onMouseUp();
+        if (appWindows_[1].open) return false;
+        // Launch from the same desktop icon and taskbar paths as live input.
+        click(menuLayout(headlessWidth_, headlessHeight_).iconHit[1]);
+        if (activeApp() != 1 || !appWindows_[1].open) return false;
+        RECT body = appWindowLayout(1).windowBody;
+        RECT client = contentClient(1);
+        GridLayout grid = paintLayout(client.right, client.bottom);
+        int x = body.left + MulDiv(grid.left + grid.cell / 2, body.right - body.left, client.right);
+        int y = body.top + MulDiv(grid.top + grid.cell / 2, body.bottom - body.top, client.bottom);
+        onMouseDown(true, x, y);
+        onMouseUp();
+        if (!canvas_[0][0]) return false;
+        focusApp(0);
+        focusApp(2);
+        if (windowOrder_.back() != 2 || !appWindows_[0].open || !appWindows_[1].open) return false;
+        RECT before = appWindowLayout(2).window;
+        RECT title = appWindowLayout(2).windowTitle;
+        x = title.left + px(40); y = (title.top + title.bottom) / 2;
+        onMouseDown(true, x, y);
+        onMouseMove(x - px(20), y - px(10));
+        onMouseUp();
+        RECT after = appWindowLayout(2).window;
+        if (after.left != before.left - px(20) || after.top != before.top - px(10)) return false;
+        click(appWindowLayout(2).windowMax);
+        if (!appWindows_[2].maximized) return false;
+        click(appWindowLayout(2).windowMax);
+        if (appWindows_[2].maximized || appWindowLayout(2).window.left != after.left) return false;
+        click(appWindowLayout(2).windowMin);
+        if (!appWindows_[2].minimized || activeApp() != 0) return false;
+        click(menuLayout(headlessWidth_, headlessHeight_).taskChip[2]);
+        if (appWindows_[2].minimized || activeApp() != 2) return false;
+        browserLoadStart_ = 0;
+        body = appWindowLayout(2).windowBody;
+        client = contentClient(2);
+        RECT tab = browserLayout(client.right, client.bottom).tabs[1];
+        x = body.left + MulDiv((tab.left + tab.right) / 2, body.right - body.left, client.right);
+        y = body.top + MulDiv((tab.top + tab.bottom) / 2, body.bottom - body.top, client.bottom);
+        onMouseDown(true, x, y); onMouseUp();
+        if (browserPage_ != 1) return false;
+        click(appWindowLayout(2).windowClose);
+        if (appWindows_[2].open || activeApp() != 0) return false;
+        click(appWindowLayout(0).windowClose);
+        if (activeApp() != 1 || !canvas_[0][0]) return false;
+        click(appWindowLayout(1).windowClose);
+        if (screen_ != Screen::Menu || appWindows_[0].open || appWindows_[1].open) return false;
+        focusApp(1);
+        headlessWidth_ = 680;
+        headlessHeight_ = 460;
+        RECT resized = appWindowLayout(1).window;
+        RECT desk = menuLayout(headlessWidth_, headlessHeight_).desktop;
+        dismissApp(true);
+        RECT movingIcon = menuLayout(headlessWidth_, headlessHeight_).iconHit[0];
+        onMouseDown(true, (movingIcon.left + movingIcon.right) / 2,
+                          (movingIcon.top + movingIcon.bottom) / 2);
+        onMouseMove(10000, 10000);
+        onMouseUp();
+        RECT clampedIcon = menuLayout(headlessWidth_, headlessHeight_).iconHit[0];
+        if (clampedIcon.right > desk.right || clampedIcon.bottom > desk.bottom ||
+            appWindows_[0].open) return false;
+        return resized.left >= desk.left && resized.top >= desk.top &&
+               resized.right <= desk.right && resized.bottom <= desk.bottom;
+    }
+
 private:
     static constexpr int kMenuItems = 4;
     static constexpr int kBrowserPages = kVeilPageCount;
@@ -871,31 +967,6 @@ private:
         L"VEIL.EXE",
         L"SHUTDOWN.EXE",
     };
-    const wchar_t* const kMenuKinds[kMenuItems] = {
-        L"APPLICATION / ROOM",
-        L"APPLICATION / CANVAS",
-        L"APPLICATION / NETWORK",
-        L"SYSTEM / SHUTDOWN",
-    };
-    const wchar_t* const kMenuBlurbs[kMenuItems] = {
-        L"A QUIET ROOM OF SHELVES.\nWALK ITS FLOOR IN THE DARK.",
-        L"A 32 X 32 GRID OF LIGHT.\nDRAW WITH THE LEFT BUTTON.",
-        L"THE NETWORK IS A MOUTH.\nIT OPENS FROM THE INSIDE.",
-        L"CLOSE THE MACHINE.\nNOTHING IS SAVED.",
-    };
-    const wchar_t* const kMenuHints[kMenuItems] = {
-        L"WASD / ARROWS   ESC TO LEAVE",
-        L"C CLEAR  1-3/WHEEL  CTRL+Z  CTRL+Y",
-        L"ARROWS / WHEEL   TAB   1-9 PAGES",
-        L"ESC TO CANCEL",
-    };
-    const wchar_t* const kMenuFacts[kMenuItems] = {
-        L"SIZE   13 X 9 TILES\nLIGHT  QUIET\nSTATE  STILL",
-        L"SIZE   32 X 32 CELLS\nLIGHT  WHITE\nSTATE  READY",
-        L"SIZE   15 PAGES\nLIGHT  NONE\nSTATE  WATCHING",
-        L"SIZE   0 X 0\nLIGHT  OFF\nSTATE  FINAL",
-    };
-
     // Veil reaches fifteen addresses. None of them resolve outside this file.
     struct VeilSite {
         const wchar_t* tab;
@@ -1154,16 +1225,12 @@ private:
     enum class MenuPart {
         None,
         Icon,
-        Open,
         Start,
         StartItem,
         TaskChip,
         WindowClose,
         WindowMax,
         WindowMin,
-        SectionPrograms,
-        SectionRooms,
-        SectionLight,
         Signal,
     };
 
@@ -1175,18 +1242,14 @@ private:
     struct MenuLayout {
         RECT monitor;
         RECT screen;
-        RECT menuBar;
         RECT desktop;
         RECT taskBar;
-        RECT panel;
         RECT iconTile[kMenuItems];
         RECT iconLabel[kMenuItems];
         RECT iconHit[kMenuItems];
         RECT window;
         RECT windowTitle;
         RECT windowBody;
-        RECT previewTile;
-        RECT openButton;
         // The shell's working buttons. They are stored here so painting and
         // hit testing use exactly the same rectangles.
         RECT startButton;
@@ -1194,13 +1257,115 @@ private:
         RECT windowMin;
         RECT windowMax;
         RECT windowClose;
-        RECT sectionPrograms;
-        RECT sectionRooms;
-        RECT sectionLight;
         RECT signal;
         RECT startMenu;
         RECT startItem[kMenuItems];
     };
+
+    struct AppWindow {
+        bool open = false;
+        bool minimized = false;
+        bool maximized = false;
+        RECT bounds{};
+    };
+
+    void invalidate() const {
+        if (hwnd_) InvalidateRect(hwnd_, nullptr, FALSE);
+    }
+
+    int windowAt(int x, int y) const {
+        for (auto it = windowOrder_.rbegin(); it != windowOrder_.rend(); ++it) {
+            if (!appWindows_[*it].open || appWindows_[*it].minimized) continue;
+            RECT bounds = appWindowLayout(*it).window;
+            if (PtInRect(&bounds, POINT{x, y})) return *it;
+        }
+        return -1;
+    }
+
+    RECT shellClient() const {
+        RECT client{0, 0, headlessWidth_, headlessHeight_};
+        if (!headless_) GetClientRect(hwnd_, &client);
+        return client;
+    }
+
+    static Screen appScreen(int index) {
+        return index == 0 ? Screen::Library :
+               index == 1 ? Screen::Paint : Screen::Browser;
+    }
+
+    int activeApp() const {
+        return screen_ == Screen::Library ? 0 : screen_ == Screen::Paint ? 1 :
+               screen_ == Screen::Browser ? 2 : -1;
+    }
+
+    MenuLayout appWindowLayout(int index) const {
+        const RECT client = shellClient();
+        MenuLayout layout = menuLayout(client.right, client.bottom);
+        const int pad = px(2);
+        const RECT desk = layout.desktop;
+        const AppWindow& app = appWindows_[index];
+        RECT bounds = app.bounds;
+        if (bounds.right == 0) {
+            const int w = std::max(1, std::min(px(800), int(desk.right - desk.left) - px(24)));
+            const int h = std::max(1, std::min(px(560), int(desk.bottom - desk.top) - px(24)));
+            const int x = std::min(int(desk.left) + px(140 + index * 18), int(desk.right) - w - px(8));
+            const int y = std::min(int(desk.top) + px(12 + index * 18), int(desk.bottom) - h - px(8));
+            bounds = RECT{x, y, x + w, y + h};
+        }
+        int w = std::min(int(bounds.right - bounds.left), int(desk.right - desk.left));
+        int h = std::min(int(bounds.bottom - bounds.top), int(desk.bottom - desk.top));
+        int x = std::clamp(int(bounds.left), int(desk.left), int(desk.right) - w);
+        int y = std::clamp(int(bounds.top), int(desk.top), int(desk.bottom) - h);
+        layout.window = app.maximized ? desk : RECT{x, y, x + w, y + h};
+        layout.windowTitle = RECT{layout.window.left + pad, layout.window.top + pad,
+                                 layout.window.right - pad, layout.window.top + px(26)};
+        layout.windowBody = RECT{layout.window.left + pad, layout.windowTitle.bottom,
+                                layout.window.right - pad, layout.window.bottom - pad};
+        RECT* boxes[] = {&layout.windowClose, &layout.windowMax, &layout.windowMin};
+        for (int i = 0; i < 3; ++i) {
+            int left = layout.windowTitle.right - px(4) - (i + 1) * px(22);
+            *boxes[i] = RECT{left, layout.windowTitle.top + px(3), left + px(18),
+                             layout.windowTitle.bottom - px(3)};
+        }
+        return layout;
+    }
+
+    RECT contentClient(int index) const {
+        RECT body = appWindowLayout(index).windowBody;
+        return RECT{0, 0, std::max(px(680), int(body.right - body.left)),
+                          std::max(px(460), int(body.bottom - body.top))};
+    }
+
+    bool contentPoint(int& x, int& y) const {
+        int index = activeApp();
+        if (index < 0) return false;
+        RECT body = appWindowLayout(index).windowBody;
+        if (!painting_ && (!PtInRect(&body, POINT{x, y}) || windowAt(x, y) != index)) return false;
+        RECT client = contentClient(index);
+        x = MulDiv(x - body.left, client.right, body.right - body.left);
+        y = MulDiv(y - body.top, client.bottom, body.bottom - body.top);
+        return true;
+    }
+
+    void focusApp(int index) {
+        auto it = std::find(windowOrder_.begin(), windowOrder_.end(), index);
+        std::rotate(it, it + 1, windowOrder_.end());
+        openScreen(appScreen(index));
+    }
+
+    void dismissApp(bool close) {
+        int index = activeApp();
+        if (index < 0) return;
+        if (close) appWindows_[index].open = false;
+        else appWindows_[index].minimized = true;
+        enterMenu();
+        for (auto it = windowOrder_.rbegin(); it != windowOrder_.rend(); ++it) {
+            if (appWindows_[*it].open && !appWindows_[*it].minimized) {
+                openScreen(appScreen(*it));
+                break;
+            }
+        }
+    }
 
     struct GridLayout {
         int left = 0;
@@ -1275,7 +1440,7 @@ private:
                 return 0;
 
             case WM_SIZE:
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
                 return 0;
 
             case WM_TIMER:
@@ -1306,7 +1471,7 @@ private:
                                  suggested->bottom - suggested->top,
                                  SWP_NOZORDER | SWP_NOACTIVATE);
                 }
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
                 return 0;
             }
 
@@ -1321,13 +1486,14 @@ private:
             case WM_SETCURSOR:
                 if (LOWORD(lParam) == HTCLIENT) {
                     const wchar_t* cursor = IDC_ARROW;
-                    if (screen_ == Screen::Paint) {
+                    POINT point{};
+                    GetCursorPos(&point);
+                    ScreenToClient(hwnd_, &point);
+                    int x = point.x, y = point.y;
+                    if (contentPoint(x, y) && screen_ == Screen::Paint) {
                         cursor = IDC_CROSS;
-                    } else if (screen_ == Screen::Menu &&
-                               menuHot_ != MenuPart::None) {
-                        cursor = IDC_HAND;
-                    } else if (screen_ == Screen::Browser &&
-                               browserHover_ >= 0) {
+                    } else if (menuHot_ != MenuPart::None ||
+                               (screen_ == Screen::Browser && browserHover_ >= 0)) {
                         cursor = IDC_HAND;
                     }
                     SetCursor(LoadCursorW(nullptr, cursor));
@@ -1343,12 +1509,12 @@ private:
                 mouseTracking_ = false;
                 if (hoverValid_ && screen_ == Screen::Paint) {
                     hoverValid_ = false;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
+                    invalidate();
                 }
                 if (menuHot_ != MenuPart::None) {
                     menuHot_ = MenuPart::None;
                     menuHotIndex_ = -1;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
+                    invalidate();
                 }
                 return 0;
 
@@ -1358,7 +1524,7 @@ private:
                 if (screen_ == Screen::Paint && !painting_) {
                     paintBrush_ = std::clamp(
                         paintBrush_ + (delta > 0 ? 1 : -1), 1, 3);
-                    InvalidateRect(hwnd_, nullptr, FALSE);
+                    invalidate();
                     return 0;
                 }
                 if (screen_ == Screen::Browser) {
@@ -1382,6 +1548,9 @@ private:
                 return 0;
 
             case WM_CAPTURECHANGED:
+                pressedIcon_ = -1;
+                iconDragged_ = false;
+                draggingApp_ = -1;
                 painting_ = false;
                 lastPaintValid_ = false;
                 return 0;
@@ -1399,16 +1568,16 @@ private:
                     if (screen_ == Screen::Splash ||
                         screen_ == Screen::Library || screen_ == Screen::Paint ||
                         screen_ == Screen::Browser) {
-                        enterMenu();
+                        if (screen_ == Screen::Splash) enterMenu();
+                        else dismissApp(false);
                         return 0;
                     }
                     if (screen_ == Screen::Menu) {
                         if (startMenuVisible_) {
                             startMenuVisible_ = false;
-                            InvalidateRect(hwnd_, nullptr, FALSE);
+                            invalidate();
                             return 0;
                         }
-                        DestroyWindow(hwnd_);
                         return 0;
                     }
                 }
@@ -1459,7 +1628,7 @@ private:
         if (GetTickCount64() - splashStart_ >= kSplashHoldMs) {
             enterMenu();
         } else {
-            InvalidateRect(hwnd_, nullptr, FALSE);
+            invalidate();
         }
     }
 
@@ -1468,17 +1637,17 @@ private:
         // keeps the pattern turning behind the working screens.
         if (screen_ == Screen::Splash || !hwnd_) return;
         if (IsIconic(hwnd_)) return;
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void enterMenu() {
-        KillTimer(hwnd_, kSplashTimer);
-        KillTimer(hwnd_, kGameTimer);
+        if (hwnd_) KillTimer(hwnd_, kSplashTimer);
+        if (hwnd_) KillTimer(hwnd_, kGameTimer);
         stopWalker();
         if (painting_) {
             painting_ = false;
             lastPaintValid_ = false;
-            if (GetCapture() == hwnd_) ReleaseCapture();
+            if (hwnd_ && GetCapture() == hwnd_) ReleaseCapture();
         }
         screen_ = Screen::Menu;
         if (hwnd_) SetWindowTextW(hwnd_, L"Anaise");
@@ -1486,23 +1655,29 @@ private:
         menuHotIndex_ = -1;
         startMenuVisible_ = false;
         audio_.play(anaise::Music::Menu);
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void openScreen(Screen screen) {
+        const int index = screen == Screen::Library ? 0 : screen == Screen::Paint ? 1 : 2;
+        const bool newlyOpened = !appWindows_[index].open;
+        appWindows_[index].open = true;
+        appWindows_[index].minimized = false;
+        hoverValid_ = false;
+        stopWalker();
         if (painting_) {
             painting_ = false;
             lastPaintValid_ = false;
-            if (GetCapture() == hwnd_) ReleaseCapture();
+            if (hwnd_ && GetCapture() == hwnd_) ReleaseCapture();
         }
         if (screen == Screen::Library) {
             lastDir_ = -1;
-            gameTickLast_ = GetTickCount64();
-            SetTimer(hwnd_, kGameTimer, kGameTickMs, nullptr);
+            gameTickLast_ = nowMs();
+            if (hwnd_) SetTimer(hwnd_, kGameTimer, kGameTickMs, nullptr);
         } else {
-            KillTimer(hwnd_, kGameTimer);
+            if (hwnd_) KillTimer(hwnd_, kGameTimer);
         }
-        if (screen == Screen::Browser) {
+        if (screen == Screen::Browser && newlyOpened) {
             browserHover_ = -1;
             browserLoadStart_ = nowMs();
         }
@@ -1529,19 +1704,19 @@ private:
         audio_.play(screen == Screen::Library || screen == Screen::Paint
                         ? anaise::Music::Room
                         : anaise::Music::Menu);
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void activateMenuItem() {
         switch (menuIndex_) {
             case 0:
-                openScreen(Screen::Library);
+                focusApp(0);
                 break;
             case 1:
-                openScreen(Screen::Paint);
+                focusApp(1);
                 break;
             case 2:
-                openScreen(Screen::Browser);
+                focusApp(2);
                 break;
             default:
                 DestroyWindow(hwnd_);
@@ -1556,7 +1731,7 @@ private:
         browserPage_ = page;
         browserHover_ = -1;
         browserLoadStart_ = nowMs();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void browserFollowLink() {
@@ -1571,7 +1746,7 @@ private:
         browserHover_ = -1;
         browserLoadStart_ = nowMs();
         browserReloadStart_ = nowMs();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     bool browserLoading() const {
@@ -1583,7 +1758,7 @@ private:
         // The signal bars are a small target; M mutes from any screen.
         if (key == 'M') {
             audio_.toggleMuted();
-            InvalidateRect(hwnd_, nullptr, FALSE);
+            invalidate();
             return;
         }
         if (screen_ == Screen::Splash) {
@@ -1593,10 +1768,10 @@ private:
         if (screen_ == Screen::Menu) {
             if (key == VK_UP || key == 'W') {
                 menuIndex_ = (menuIndex_ + kMenuItems - 1) % kMenuItems;
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
             } else if (key == VK_DOWN || key == 'S') {
                 menuIndex_ = (menuIndex_ + 1) % kMenuItems;
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
             } else if (key == VK_RETURN || key == VK_SPACE) {
                 activateMenuItem();
             }
@@ -1629,7 +1804,7 @@ private:
                 clearCanvas();
             } else if (key == '1' || key == '2' || key == '3') {
                 paintBrush_ = key - '0';
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
             } else if (key == 'Z' && ctrl && shift) {
                 redoCanvas();
             } else if (key == 'Z' && ctrl) {
@@ -1698,7 +1873,7 @@ private:
         walker_.progress = 0.0;
         walker_.animMs = 0.0;
         walker_.pose = kStandPose;
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void tickGame() {
@@ -1707,7 +1882,7 @@ private:
         double elapsed = static_cast<double>(now - gameTickLast_);
         gameTickLast_ = now;
         if (elapsed > 120.0) elapsed = 120.0;
-        if (updateWalker(elapsed)) InvalidateRect(hwnd_, nullptr, FALSE);
+        if (updateWalker(elapsed)) invalidate();
     }
 
     // One tile per step with a pause on the standing frame in between, the way
@@ -1765,7 +1940,7 @@ private:
 
     // ---------------------------------------------------------------- mouse
     void onMouseMove(int x, int y) {
-        if (!mouseTracking_) {
+        if (hwnd_ && !mouseTracking_) {
             TRACKMOUSEEVENT track{};
             track.cbSize = sizeof(track);
             track.dwFlags = TME_LEAVE;
@@ -1774,8 +1949,39 @@ private:
             mouseTracking_ = true;
         }
 
-        if (screen_ == Screen::Menu) {
-            const MenuHit hit = menuHitAt(x, y);
+        if (pressedIcon_ >= 0) {
+            const int dx = x - int(dragStart_.x), dy = y - int(dragStart_.y);
+            if (!iconDragged_ && (std::abs(dx) > px(4) || std::abs(dy) > px(4))) iconDragged_ = true;
+            if (iconDragged_) {
+                const RECT desk = menuLayout(shellClient().right, shellClient().bottom).desktop;
+                const int w = iconDragBounds_.right - iconDragBounds_.left;
+                const int h = iconDragBounds_.bottom - iconDragBounds_.top;
+                const int left = std::clamp(int(iconDragBounds_.left) + dx,
+                    int(desk.left), std::max(int(desk.left), int(desk.right) - w));
+                const int top = std::clamp(int(iconDragBounds_.top) + dy,
+                    int(desk.top), std::max(int(desk.top), int(desk.bottom) - h));
+                iconPositions_[pressedIcon_] = POINT{MulDiv(left - desk.left, 96, dpi_),
+                                                      MulDiv(top - desk.top, 96, dpi_)};
+                iconPlaced_[pressedIcon_] = true;
+                invalidate();
+            }
+            return;
+        }
+        if (draggingApp_ >= 0) {
+            const RECT desk = menuLayout(shellClient().right, shellClient().bottom).desktop;
+            RECT bounds = dragBounds_;
+            const int w = bounds.right - bounds.left, h = bounds.bottom - bounds.top;
+            int left = std::clamp(int(dragBounds_.left) + x - int(dragStart_.x),
+                                  int(desk.left), int(desk.right) - w);
+            int top = std::clamp(int(dragBounds_.top) + y - int(dragStart_.y),
+                                 int(desk.top), int(desk.bottom) - h);
+            appWindows_[draggingApp_].bounds = RECT{left, top, left + w, top + h};
+            invalidate();
+            return;
+        }
+        const MenuHit shellHit = menuHitAt(x, y);
+        if (!painting_ && (screen_ == Screen::Menu || shellHit.part != MenuPart::None)) {
+            const MenuHit hit = shellHit;
             bool changed = hit.part != menuHot_ || hit.index != menuHotIndex_;
             menuHot_ = hit.part;
             menuHotIndex_ = hit.index;
@@ -1783,15 +1989,28 @@ private:
                 menuIndex_ = hit.index;
                 changed = true;
             }
-            if (changed) InvalidateRect(hwnd_, nullptr, FALSE);
+            if (changed) invalidate();
             return;
         }
 
+        if (menuHot_ != MenuPart::None) {
+            menuHot_ = MenuPart::None;
+            menuHotIndex_ = -1;
+            invalidate();
+        }
+        if (!contentPoint(x, y)) {
+            if (hoverValid_ || browserHover_ >= 0) {
+                hoverValid_ = false;
+                browserHover_ = -1;
+                invalidate();
+            }
+            return;
+        }
         if (screen_ == Screen::Browser) {
             const int hit = browserHitAt(x, y);
             if (hit != browserHover_) {
                 browserHover_ = hit;
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
             }
             return;
         }
@@ -1806,44 +2025,48 @@ private:
         if (!inside) {
             if (hoverValid_) {
                 hoverValid_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
             }
         } else if (!hoverValid_ || col != hoverCol_ || row != hoverRow_) {
             hoverValid_ = true;
             hoverCol_ = col;
             hoverRow_ = row;
-            InvalidateRect(hwnd_, nullptr, FALSE);
+            invalidate();
         }
     }
 
     void onMouseDown(bool leftButton, int x, int y) {
-        SetFocus(hwnd_);
+        if (hwnd_) SetFocus(hwnd_);
 
         if (screen_ == Screen::Splash) {
             enterMenu();
             return;
         }
-        if (screen_ == Screen::Menu) {
+        const MenuHit hit = menuHitAt(x, y);
+        if (hit.index >= 0 && (hit.part == MenuPart::WindowClose ||
+            hit.part == MenuPart::WindowMax || hit.part == MenuPart::WindowMin)) focusApp(hit.index);
+        if ((screen_ == Screen::Menu && windowAt(x, y) < 0) || hit.part != MenuPart::None) {
             if (!leftButton) return;
-            const MenuHit hit = menuHitAt(x, y);
             if (startMenuVisible_ && hit.part != MenuPart::Start &&
                 hit.part != MenuPart::StartItem) {
                 startMenuVisible_ = false;
-                InvalidateRect(hwnd_, nullptr, FALSE);
+                invalidate();
                 return;
             }
             switch (hit.part) {
                 case MenuPart::Icon:
+                    enterMenu();
                     menuIndex_ = hit.index;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                    activateMenuItem();
-                    break;
-                case MenuPart::Open:
-                    activateMenuItem();
+                    pressedIcon_ = hit.index;
+                    iconDragged_ = false;
+                    dragStart_ = POINT{x, y};
+                    iconDragBounds_ = menuLayout(shellClient().right, shellClient().bottom).iconHit[hit.index];
+                    if (hwnd_) SetCapture(hwnd_);
+                    invalidate();
                     break;
                 case MenuPart::Start:
                     startMenuVisible_ = !startMenuVisible_;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
+                    invalidate();
                     break;
                 case MenuPart::StartItem:
                     menuIndex_ = hit.index;
@@ -1852,37 +2075,48 @@ private:
                     break;
                 case MenuPart::TaskChip:
                     menuIndex_ = hit.index;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                    activateMenuItem();
+                    if (activeApp() == hit.index) dismissApp(false);
+                    else focusApp(hit.index);
                     break;
                 case MenuPart::WindowClose:
-                    DestroyWindow(hwnd_);
+                    dismissApp(true);
                     break;
                 case MenuPart::WindowMax:
-                    ShowWindow(hwnd_, IsZoomed(hwnd_) ? SW_RESTORE
-                                                      : SW_MAXIMIZE);
+                    if (activeApp() >= 0) {
+                        appWindows_[activeApp()].maximized = !appWindows_[activeApp()].maximized;
+                        invalidate();
+                    }
                     break;
                 case MenuPart::WindowMin:
-                    ShowWindow(hwnd_, SW_MINIMIZE);
+                    dismissApp(false);
                     break;
                 case MenuPart::Signal:
                     audio_.toggleMuted();
-                    InvalidateRect(hwnd_, nullptr, FALSE);
-                    break;
-                case MenuPart::SectionPrograms:
-                    activateMenuItem();
-                    break;
-                case MenuPart::SectionRooms:
-                    menuIndex_ = 0;
-                    openScreen(Screen::Library);
-                    break;
-                case MenuPart::SectionLight:
-                    backgroundHidden_ = !backgroundHidden_;
-                    InvalidateRect(hwnd_, nullptr, FALSE);
+                    invalidate();
                     break;
                 default:
                     break;
             }
+            return;
+        }
+        for (auto it = windowOrder_.rbegin(); it != windowOrder_.rend(); ++it) {
+            const int index = *it;
+            if (!appWindows_[index].open || appWindows_[index].minimized) continue;
+            const MenuLayout layout = appWindowLayout(index);
+            if (!PtInRect(&layout.window, POINT{x, y})) continue;
+            focusApp(index);
+            if (leftButton && PtInRect(&layout.windowTitle, POINT{x, y}) &&
+                !appWindows_[index].maximized) {
+                draggingApp_ = index;
+                dragStart_ = POINT{x, y};
+                dragBounds_ = layout.window;
+                if (hwnd_) SetCapture(hwnd_);
+                return;
+            }
+            break;
+        }
+        if (!contentPoint(x, y)) {
+            enterMenu();
             return;
         }
         if (screen_ == Screen::Browser) {
@@ -1910,21 +2144,27 @@ private:
         painting_ = true;
         lastPaintValid_ = false;
         erasing_ = !leftButton;
-        SetCapture(hwnd_);
+        if (hwnd_) SetCapture(hwnd_);
         paintTo(x, y);
     }
 
     void onMouseUp() {
-        if (!painting_) return;
+        const int clickedIcon = !iconDragged_ ? pressedIcon_ : -1;
+        pressedIcon_ = -1;
+        iconDragged_ = false;
+        draggingApp_ = -1;
         painting_ = false;
         lastPaintValid_ = false;
-        if (GetCapture() == hwnd_) ReleaseCapture();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        if (hwnd_ && GetCapture() == hwnd_) ReleaseCapture();
+        invalidate();
+        if (clickedIcon >= 0) {
+            menuIndex_ = clickedIcon;
+            activateMenuItem();
+        }
     }
 
     MenuHit menuHitAt(int x, int y) const {
-        RECT client{};
-        GetClientRect(hwnd_, &client);
+        const RECT client = shellClient();
         const MenuLayout layout = menuLayout(client.right, client.bottom);
         const POINT point{x, y};
         auto inside = [&](const RECT& rect) {
@@ -1938,38 +2178,27 @@ private:
                 }
             }
         }
-        for (int i = 0; i < kMenuItems; ++i) {
-            if (inside(layout.iconHit[i])) {
-                return MenuHit{MenuPart::Icon, i};
-            }
+        for (auto it = windowOrder_.rbegin(); it != windowOrder_.rend(); ++it) {
+            int i = *it;
+            if (!appWindows_[i].open || appWindows_[i].minimized) continue;
+            const MenuLayout win = appWindowLayout(i);
+            if (!inside(win.window)) continue;
+            if (inside(win.windowClose)) return MenuHit{MenuPart::WindowClose, i};
+            if (inside(win.windowMax)) return MenuHit{MenuPart::WindowMax, i};
+            if (inside(win.windowMin)) return MenuHit{MenuPart::WindowMin, i};
+            return MenuHit{};
         }
-        // The window's OPEN plate acts on the app that is already selected.
-        if (inside(layout.openButton)) return MenuHit{MenuPart::Open, menuIndex_};
-        if (inside(layout.windowClose)) {
-            return MenuHit{MenuPart::WindowClose, -1};
-        }
-        if (inside(layout.windowMax)) {
-            return MenuHit{MenuPart::WindowMax, -1};
-        }
-        if (inside(layout.windowMin)) {
-            return MenuHit{MenuPart::WindowMin, -1};
+        if (inside(layout.iconHit[menuIndex_])) return MenuHit{MenuPart::Icon, menuIndex_};
+        for (int i = kMenuItems - 1; i >= 0; --i) {
+            if (inside(layout.iconHit[i])) return MenuHit{MenuPart::Icon, i};
         }
         if (inside(layout.startButton)) return MenuHit{MenuPart::Start, -1};
         for (int i = 0; i < kMenuItems; ++i) {
-            if (inside(layout.taskChip[i])) {
+            if (i < 3 && appWindows_[i].open && inside(layout.taskChip[i])) {
                 return MenuHit{MenuPart::TaskChip, i};
             }
         }
         if (inside(layout.signal)) return MenuHit{MenuPart::Signal, -1};
-        if (inside(layout.sectionPrograms)) {
-            return MenuHit{MenuPart::SectionPrograms, -1};
-        }
-        if (inside(layout.sectionRooms)) {
-            return MenuHit{MenuPart::SectionRooms, -1};
-        }
-        if (inside(layout.sectionLight)) {
-            return MenuHit{MenuPart::SectionLight, -1};
-        }
         return MenuHit{};
     }
 
@@ -1977,8 +2206,8 @@ private:
         const int scale = static_cast<int>(dpi_);
         auto px = [scale](int value) { return MulDiv(value, scale, 96); };
 
-        MenuLayout layout;
-        const int margin = px(8);
+        MenuLayout layout{};
+        const int margin = 0;
         const int bezel = px(22);
         layout.monitor =
             RECT{margin, margin, width - margin, height - margin};
@@ -1990,96 +2219,30 @@ private:
             layout.monitor = layout.screen;
         }
 
-        const int menuHeight = px(26);
         const int taskHeight = px(30);
-        layout.menuBar = RECT{layout.screen.left, layout.screen.top,
-                              layout.screen.right,
-                              layout.screen.top + menuHeight};
         layout.taskBar = RECT{layout.screen.left,
                               layout.screen.bottom - taskHeight,
                               layout.screen.right, layout.screen.bottom};
-        layout.desktop = RECT{layout.screen.left, layout.menuBar.bottom,
+        layout.desktop = RECT{layout.screen.left, layout.screen.top,
                               layout.screen.right, layout.taskBar.top};
 
-        int tile = px(56);
-        const int labelHeight = px(16);
-        const int iconGap = px(8);
-        const int panelWidth = tile + px(44);
-        const int headerHeight = px(24);
-        const int panelPad = px(10);
-        const int desktopHeight = layout.desktop.bottom - layout.desktop.top;
-        const int maxPanelHeight = std::max(px(180), desktopHeight - px(32));
-        const int wantedHeight = headerHeight + kMenuItems * (tile + px(2) +
-                                   labelHeight + iconGap) - iconGap + panelPad;
-        if (wantedHeight > maxPanelHeight) {
-            const int fixed = headerHeight + panelPad - iconGap +
-                              kMenuItems * (px(2) + labelHeight + iconGap);
-            tile = std::max(px(28), (maxPanelHeight - fixed) / kMenuItems);
-        }
-        const int panelHeight = headerHeight + kMenuItems * (tile + px(2) +
-                                  labelHeight + iconGap) - iconGap + panelPad;
-        layout.panel = RECT{layout.desktop.left + px(16),
-                            layout.desktop.top + px(16),
-                            layout.desktop.left + px(16) + panelWidth,
-                            layout.desktop.top + px(16) + panelHeight};
-
+        const int tile = px(56);
+        const int labelHeight = px(18);
+        const int hitWidth = px(104);
+        const int hitHeight = tile + px(4) + labelHeight;
+        const RECT& desk = layout.desktop;
         for (int i = 0; i < kMenuItems; ++i) {
-            const int top = layout.panel.top + headerHeight +
-                            i * (tile + px(2) + labelHeight + iconGap);
-            const int left = layout.panel.left + (panelWidth - tile) / 2;
-            layout.iconTile[i] = RECT{left, top, left + tile, top + tile};
-            layout.iconLabel[i] =
-                RECT{layout.panel.left + px(4), top + tile + px(2),
-                     layout.panel.right - px(4), top + tile + px(2) +
-                                                    labelHeight};
-            layout.iconHit[i] =
-                RECT{layout.panel.left + px(2), top - px(3),
-                     layout.panel.right - px(2),
-                     layout.iconLabel[i].bottom + px(3)};
-        }
-
-        const int availableLeft = layout.panel.right + px(26);
-        const int availableRight = layout.desktop.right - px(18);
-        const int availableWidth = std::max(px(240), availableRight - availableLeft);
-        const int windowWidth = std::min(px(620), availableWidth);
-        int windowHeight = std::min(px(330), desktopHeight - px(36));
-        windowHeight = std::max(px(220), windowHeight);
-        const int windowLeft =
-            availableLeft + (availableWidth - windowWidth) / 2;
-        const int windowTop =
-            layout.desktop.top + (desktopHeight - windowHeight) / 2;
-        layout.window = RECT{windowLeft, windowTop,
-                             windowLeft + windowWidth,
-                             windowTop + windowHeight};
-        layout.windowTitle =
-            RECT{layout.window.left, layout.window.top, layout.window.right,
-                 layout.window.top + px(24)};
-        layout.windowBody =
-            RECT{layout.window.left, layout.windowTitle.bottom,
-                 layout.window.right, layout.window.bottom};
-
-        int preview = std::min(px(96), windowHeight - px(150));
-        preview = std::max(px(56), preview);
-        layout.previewTile =
-            RECT{layout.window.left + px(20),
-                 layout.windowBody.top + px(20),
-                 layout.window.left + px(20) + preview,
-                 layout.windowBody.top + px(20) + preview};
-        layout.openButton =
-            RECT{layout.window.right - px(20) - px(92),
-                 layout.window.bottom - px(20) - px(26),
-                 layout.window.right - px(20),
-                 layout.window.bottom - px(20)};
-
-        // Title-bar controls, right to left: close, zoom, minimise.
-        const RECT& title = layout.windowTitle;
-        const int box = px(12);
-        const int boxTop = title.top + (title.bottom - title.top - box) / 2;
-        RECT* const windowBoxes[3] = {&layout.windowClose, &layout.windowMax,
-                                      &layout.windowMin};
-        for (int i = 0; i < 3; ++i) {
-            const int left = title.right - px(8) - (i + 1) * px(16);
-            *windowBoxes[i] = RECT{left, boxTop, left + box, boxTop + box};
+            const int desiredX = iconPlaced_[i] ? px(iconPositions_[i].x) : px(12);
+            const int desiredY = iconPlaced_[i] ? px(iconPositions_[i].y) : px(12 + i * 90);
+            const int left = desk.left + std::clamp(desiredX, 0,
+                std::max(0, int(desk.right - desk.left) - hitWidth));
+            const int top = desk.top + std::clamp(desiredY, 0,
+                std::max(0, int(desk.bottom - desk.top) - hitHeight));
+            layout.iconHit[i] = RECT{left, top, left + hitWidth, top + hitHeight};
+            const int tileLeft = left + (hitWidth - tile) / 2;
+            layout.iconTile[i] = RECT{tileLeft, top, tileLeft + tile, top + tile};
+            layout.iconLabel[i] = RECT{left, top + tile + px(4), left + hitWidth,
+                                      top + hitHeight};
         }
 
         // The taskbar: start plate, then one chip per app, then the clock and
@@ -2087,9 +2250,10 @@ private:
         const RECT& bar = layout.taskBar;
         layout.startButton =
             RECT{bar.left + px(6), bar.top + px(4),
-                 bar.left + px(6) + px(86), bar.bottom - px(4)};
+                 bar.left + px(6) + px(30), bar.bottom - px(4)};
         int chipLeft = layout.startButton.right + px(10);
-        for (int i = 0; i < kMenuItems; ++i) {
+        for (int i = 0; i < 3; ++i) {
+            if (!appWindows_[i].open) continue;
             const int chipWidth = static_cast<int>(std::wcslen(kMenuLabels[i])) *
                                       px(7) +
                                   px(18);
@@ -2102,26 +2266,6 @@ private:
         layout.signal =
             RECT{bar.right - px(10) - clockReserve - px(30), bar.top + px(4),
                  bar.right - px(10) - clockReserve, bar.bottom - px(4)};
-
-        // Menubar sections, as three separate clickable plates.
-        const wchar_t* const sections[3] = {L"PROGRAMS", L"ROOMS", L"LIGHT"};
-        RECT* const sectionRects[3] = {&layout.sectionPrograms,
-                                       &layout.sectionRooms,
-                                       &layout.sectionLight};
-        int sectionWidth = 0;
-        for (const wchar_t* text : sections) {
-            sectionWidth += static_cast<int>(std::wcslen(text)) * px(7);
-        }
-        sectionWidth += 2 * px(18);
-        int sectionLeft = (layout.menuBar.left + layout.menuBar.right) / 2 -
-                          sectionWidth / 2;
-        for (int i = 0; i < 3; ++i) {
-            const int width = static_cast<int>(std::wcslen(sections[i])) * px(7);
-            *sectionRects[i] =
-                RECT{sectionLeft, layout.menuBar.top, sectionLeft + width,
-                     layout.menuBar.bottom};
-            sectionLeft += width + px(18);
-        }
 
         // The start menu sits directly above the start plate.
         const int startItemHeight = px(22);
@@ -2155,14 +2299,12 @@ private:
 
         BrowserLayout layout;
         const int margin = px(34);
-        const int headerBottom =
-            margin + std::max(2, px(5)) * kLogoGrid + px(20);
-        const int top = headerBottom + px(24);
-        const int bottom = std::max(top + px(230), height - px(58));
+        const int top = px(8);
+        const int bottom = std::max(top + px(230), height - px(8));
         layout.window = RECT{margin, top, width - margin, bottom};
         layout.title =
             RECT{layout.window.left, layout.window.top, layout.window.right,
-                 layout.window.top + px(24)};
+                 layout.window.top};
 
         static constexpr int kTabWidths[kBrowserPages] = {
             54, 54, 58, 58, 58, 58, 58, 58, 50,
@@ -2231,8 +2373,7 @@ private:
     }
 
     int browserHitAt(int x, int y) const {
-        RECT client{};
-        GetClientRect(hwnd_, &client);
+        const RECT client = contentClient(2);
         const BrowserLayout layout =
             browserLayout(client.right, client.bottom);
         const POINT point{x, y};
@@ -2273,8 +2414,7 @@ private:
     }
 
     bool paintCellAt(int x, int y, int& col, int& row) const {
-        RECT client{};
-        GetClientRect(hwnd_, &client);
+        const RECT client = contentClient(1);
         const GridLayout layout = paintLayout(client.right, client.bottom);
         if (layout.cell <= 0) return false;
         if (x < layout.left || y < layout.top) return false;
@@ -2300,7 +2440,7 @@ private:
         lastPaintCol_ = col;
         lastPaintRow_ = row;
         lastPaintValid_ = true;
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void stampBrush(int col, int row, bool erase) {
@@ -2352,7 +2492,7 @@ private:
         redo_.push_back(canvas_);
         canvas_ = undo_.back();
         undo_.pop_back();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void redoCanvas() {
@@ -2361,13 +2501,13 @@ private:
         undo_.push_back(canvas_);
         canvas_ = redo_.back();
         redo_.pop_back();
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     void clearCanvas() {
         pushUndo();
         for (auto& row : canvas_) row.fill(false);
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     // ------------------------------------------------------------ fullscreen
@@ -2398,7 +2538,7 @@ private:
             fullscreen_ = false;
             applyMonochromeTitleBar(hwnd_);
         }
-        InvalidateRect(hwnd_, nullptr, FALSE);
+        invalidate();
     }
 
     // --------------------------------------------------------------- drawing
@@ -2563,8 +2703,8 @@ private:
         };
         BITMAPINFO info{};
         info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        info.bmiHeader.biWidth = 8;
-        info.bmiHeader.biHeight = -8;  // top-down rows
+        info.bmiHeader.biWidth = 24;
+        info.bmiHeader.biHeight = -24;  // top-down rows
         info.bmiHeader.biPlanes = 1;
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB;
@@ -2576,10 +2716,10 @@ private:
             return;
         }
         auto* pixels = static_cast<std::uint32_t*>(bits);
-        for (int row = 0; row < 8; ++row) {
-            for (int col = 0; col < 8; ++col) {
-                pixels[row * 8 + col] =
-                    kBayer[row][col] < level ? 0x00FFFFFFu : 0x00000000u;
+        for (int row = 0; row < 24; ++row) {
+            for (int col = 0; col < 24; ++col) {
+                pixels[row * 24 + col] =
+                    kBayer[row / 3][col / 3] < level ? 0x00FFFFFFu : 0x00000000u;
             }
         }
         HBRUSH brush = CreatePatternBrush(pattern);
@@ -2653,53 +2793,6 @@ private:
         return menuHot_ == part && (index < 0 || menuHotIndex_ == index);
     }
 
-    void paintMenuBar(HDC dc, const MenuLayout& layout) const {
-        const int scale = static_cast<int>(dpi_);
-        auto px = [scale](int value) { return MulDiv(value, scale, 96); };
-        const RECT& bar = layout.menuBar;
-        fillColor(dc, bar, kBlack);
-        drawLine(dc, bar.left, bar.bottom - 1, bar.right, bar.bottom - 1);
-
-        const int logoCell = std::max(1, px(1));
-        const int logoPixels = kLogoGrid * logoCell;
-        const int textH = textHeight(dc, smallFont_);
-        const int centerY = bar.top + (bar.bottom - bar.top - textH) / 2;
-        drawLogo(dc, bar.left + px(8), centerY + textH / 2 - logoPixels / 2,
-                 logoCell);
-        const int brandX = bar.left + px(8) + logoPixels + px(8);
-        drawTextAt(dc, smallFont_, L"ANAISE OS", brandX, centerY, kWhite);
-
-        const wchar_t* const sections[3] = {L"PROGRAMS", L"ROOMS", L"LIGHT"};
-        const RECT* const rects[3] = {&layout.sectionPrograms,
-                                      &layout.sectionRooms,
-                                      &layout.sectionLight};
-        const MenuPart parts[3] = {MenuPart::SectionPrograms,
-                                   MenuPart::SectionRooms,
-                                   MenuPart::SectionLight};
-        for (int i = 0; i < 3; ++i) {
-            drawTextAt(dc, smallFont_, sections[i], rects[i]->left, centerY,
-                       kWhite);
-            if (hot(parts[i])) {
-                drawLine(dc, rects[i]->left, rects[i]->bottom - px(4),
-                         rects[i]->right, rects[i]->bottom - px(4));
-            }
-        }
-
-        const std::wstring clock = clockText();
-        const int clockWidth = textWidth(dc, smallFont_, clock);
-        const int clockX = bar.right - px(10) - clockWidth;
-        drawTextAt(dc, smallFont_, clock, clockX, centerY, kWhite);
-        HBRUSH signalBrush = CreateSolidBrush(kWhite);
-        const int signalLeft = clockX - px(30);
-        for (int i = 0; i < 4; ++i) {
-            const int barHeight = px(2 + i * 2);
-            RECT signal{signalLeft + i * px(4), centerY + textH - barHeight,
-                        signalLeft + i * px(4) + px(3), centerY + textH};
-            FillRect(dc, &signal, signalBrush);
-        }
-        DeleteObject(signalBrush);
-    }
-
     // A dotted occult seal, used as a watermark inside the app window. It is
     // built from single white pixels and short dashes, never a filled shape, so
     // it reads as faint etched light instead of a grey wash.
@@ -2743,21 +2836,13 @@ private:
         DeleteObject(brush);
     }
 
-    void paintAppPanel(HDC dc, const MenuLayout& layout) const {
+    void paintDesktopIcons(HDC dc, const MenuLayout& layout) const {
         const int scale = static_cast<int>(dpi_);
         auto px = [scale](int value) { return MulDiv(value, scale, 96); };
-        const RECT& panel = layout.panel;
-        fillColor(dc, panel, kBlack);
-        strokeRect(dc, panel, kWhite, 1);
-        const int headerH = px(24);
         const int textH = textHeight(dc, smallFont_);
-        drawTextCentered(dc, smallFont_, L"PROGRAMS",
-                         (panel.left + panel.right) / 2,
-                         panel.top + (headerH - textH) / 2, kWhite);
-        drawLine(dc, panel.left + px(6), panel.top + headerH - 1,
-                 panel.right - px(6), panel.top + headerH - 1);
-
-        for (int i = 0; i < kMenuItems; ++i) {
+        for (int order = 0; order < kMenuItems; ++order) {
+            const int i = order == kMenuItems - 1 ? menuIndex_ :
+                          (order >= menuIndex_ ? order + 1 : order);
             const bool selected = i == menuIndex_;
             drawMenuIcon(dc, i, layout.iconTile[i], selected);
             const RECT& label = layout.iconLabel[i];
@@ -2783,10 +2868,9 @@ private:
         }
     }
 
-    void paintAppWindow(HDC dc, const MenuLayout& layout) const {
+    void paintAppWindow(HDC dc, const MenuLayout& layout, int index) const {
         const int scale = static_cast<int>(dpi_);
         auto px = [scale](int value) { return MulDiv(value, scale, 96); };
-        const int index = menuIndex_;
         const RECT& window = layout.window;
 
         RECT shadow{window.left + px(7), window.top + px(7),
@@ -2813,8 +2897,7 @@ private:
         drawTextAt(dc, bodyFont_, kMenuTitles[index],
                    iconLeft + iconPixels + px(8), titleY, kWhite);
 
-        // Close, zoom and minimise boxes, right to left. They are live: the
-        // close box quits, zoom toggles maximise and minimise does what it says.
+        // Each app owns its close, maximize/restore and minimize controls.
         struct WindowButton {
             const RECT* rect;
             int glyph;
@@ -2851,103 +2934,27 @@ private:
             }
         }
 
-        const RECT& body = layout.windowBody;
-        fillDither(dc, layout.previewTile, 8);
-        strokeRect(dc, layout.previewTile, kWhite, 1);
-        const int previewWidth = layout.previewTile.right -
-                                 layout.previewTile.left;
-        const int previewCell = std::max(1, (previewWidth - px(16)) / 16);
-        const int glyph = previewCell * 16;
-        drawGlyph(dc, appIconRows(index),
-                  layout.previewTile.left +
-                      (previewWidth - glyph) / 2,
-                  layout.previewTile.top + (previewWidth - glyph) / 2,
-                  previewCell, kWhite);
+    }
 
-        const std::wstring tag = L"APP 0" + std::to_wstring(index + 1);
-        const int smallH = textHeight(dc, smallFont_);
-        drawTextCentered(dc, smallFont_, tag,
-                         (layout.previewTile.left +
-                          layout.previewTile.right) / 2,
-                         layout.previewTile.bottom + px(8), kWhite);
-
-        const int textX = layout.previewTile.right + px(28);
-        const int textRight = window.right - px(20);
-        int y = body.top + px(20);
-        drawTextAt(dc, smallFont_, kMenuKinds[index], textX, y, kWhite);
-        y += smallH + px(10);
-        drawLine(dc, textX, y, textRight, y);
-        y += px(14);
-
-        const int bodyTextH = textHeight(dc, bodyFont_);
-        const wchar_t* blurb = kMenuBlurbs[index];
-        std::wstring line;
-        for (const wchar_t* p = blurb;; ++p) {
-            if (*p == L'\n' || *p == L'\0') {
-                drawTextAt(dc, bodyFont_, line, textX, y, kWhite);
-                y += bodyTextH + px(4);
-                line.clear();
-                if (*p == L'\0') break;
-            } else {
-                line.push_back(*p);
-            }
-        }
-
-        y += px(14);
-        drawTextAt(dc, smallFont_, kMenuHints[index], textX, y, kWhite);
-
-        // A small file inspector under the blurb. It also keeps the window
-        // from going hollow when the desktop is tall.
-        const int factsTop =
-            std::max(y + px(32), static_cast<int>(body.top) + px(160));
-        if (layout.openButton.top - px(12) >= factsTop + smallH) {
-            drawLine(dc, textX, factsTop - px(8), textRight,
-                     factsTop - px(8));
-            int factsY = factsTop;
-            const wchar_t* facts = kMenuFacts[index];
-            std::wstring factLine;
-            for (const wchar_t* p = facts;; ++p) {
-                if (*p == L'\n' || *p == L'\0') {
-                    if (factsY + smallH > layout.openButton.top - px(10)) break;
-                    drawTextAt(dc, smallFont_, factLine, textX, factsY, kWhite);
-                    factsY += smallH + px(6);
-                    factLine.clear();
-                    if (*p == L'\0') break;
-                } else {
-                    factLine.push_back(*p);
-                }
-            }
-        }
-
-        // Etched seal in the quiet corner above OPEN.
-        const int sealRadius = std::clamp(
-            (static_cast<int>(layout.openButton.top) -
-             static_cast<int>(body.top)) / 6,
-            px(18), px(46));
-        const int sealX = textRight - sealRadius - px(8);
-        const int sealY = layout.openButton.top - sealRadius - px(16);
-        drawSigil(dc, sealX, sealY, sealRadius);
-
-        const int statusY = layout.openButton.top +
-                            (layout.openButton.bottom -
-                             layout.openButton.top - smallH) / 2;
-        drawTextAt(dc, smallFont_, L"ENTER TO OPEN", window.left + px(20),
-                   statusY, kWhite);
-
-        const bool hotOpen = hot(MenuPart::Open);
-        if (hotOpen) {
-            fillColor(dc, layout.openButton, kWhite);
-            drawTextCentered(dc, smallFont_, L"OPEN",
-                             (layout.openButton.left +
-                              layout.openButton.right) / 2,
-                             statusY, kBlack);
-        } else {
-            strokeRect(dc, layout.openButton, kWhite, 1);
-            drawTextCentered(dc, smallFont_, L"OPEN",
-                             (layout.openButton.left +
-                              layout.openButton.right) / 2,
-                             statusY, kWhite);
-        }
+    void paintDesktopApp(HDC dc, int index) {
+        const MenuLayout layout = appWindowLayout(index);
+        paintAppWindow(dc, layout, index);
+        const RECT client = contentClient(index);
+        HDC content = CreateCompatibleDC(dc);
+        HBITMAP bitmap = CreateCompatibleBitmap(dc, client.right, client.bottom);
+        HGDIOBJ old = SelectObject(content, bitmap);
+        SetBkMode(content, TRANSPARENT);
+        fillColor(content, client, kBlack);
+        if (index == 0) paintLibrary(content, client.right, client.bottom);
+        else if (index == 1) paintPaintScreen(content, client.right, client.bottom);
+        else paintBrowser(content, client.right, client.bottom);
+        const RECT body = layout.windowBody;
+        SetStretchBltMode(dc, COLORONCOLOR);
+        StretchBlt(dc, body.left, body.top, body.right - body.left, body.bottom - body.top,
+                   content, 0, 0, client.right, client.bottom, SRCCOPY);
+        SelectObject(content, old);
+        DeleteObject(bitmap);
+        DeleteDC(content);
     }
 
     void paintTaskBar(HDC dc, const MenuLayout& layout) const {
@@ -2959,25 +2966,22 @@ private:
 
         const int textH = textHeight(dc, smallFont_);
         const int centerY = bar.top + (bar.bottom - bar.top - textH) / 2;
-        const std::wstring brand = L"ANAISE";
         const int logoCell = std::max(1, px(1));
         const int logoPixels = kLogoGrid * logoCell;
         const RECT& start = layout.startButton;
-        fillColor(dc, start, kWhite);
-        drawLogo(dc, start.left + px(5),
+        strokeRect(dc, start, kWhite, 1);
+        drawLogo(dc, (start.left + start.right - logoPixels) / 2,
                  start.top + (start.bottom - start.top - logoPixels) / 2,
-                 logoCell, kBlack);
-        const int brandWidth = textWidth(dc, smallFont_, brand);
-        drawTextAt(dc, smallFont_, brand,
-                   start.right - px(7) - brandWidth, centerY, kBlack);
+                 logoCell, kWhite);
         if (hot(MenuPart::Start)) {
-            drawDashedRect(dc, start, px(3), px(2), kBlack);
+            drawDashedRect(dc, start, px(3), px(2), kWhite);
         }
 
-        for (int i = 0; i < kMenuItems; ++i) {
+        for (int i = 0; i < 3; ++i) {
+            if (!appWindows_[i].open) continue;
             const std::wstring label = kMenuLabels[i];
             const RECT& chip = layout.taskChip[i];
-            if (i == menuIndex_) {
+            if (i == activeApp()) {
                 fillColor(dc, chip, kWhite);
                 drawTextCentered(dc, smallFont_, label,
                                  (chip.left + chip.right) / 2, centerY, kBlack);
@@ -2992,27 +2996,21 @@ private:
         }
 
         const RECT& signal = layout.signal;
-        HBRUSH signalBrush = CreateSolidBrush(kWhite);
-        const int bars = 4;
-        const int gap = px(2);
-        const int barWidth = px(3);
-        const int barsWidth = bars * barWidth + (bars - 1) * gap;
-        const int barsLeft = signal.right - barsWidth;
-        for (int i = 0; i < bars; ++i) {
-            const int barHeight = px(3 + i * 2);
-            RECT barsRect{barsLeft + i * (barWidth + gap),
-                          signal.bottom - px(4) - barHeight,
-                          barsLeft + i * (barWidth + gap) + barWidth,
-                          signal.bottom - px(4)};
-            FillRect(dc, &barsRect, signalBrush);
-        }
-        DeleteObject(signalBrush);
+        const int cy = (signal.top + signal.bottom) / 2;
+        const int sx = signal.left + px(4);
+        RECT speaker{sx, cy - px(3), sx + px(4), cy + px(3)};
+        fillColor(dc, speaker, kWhite);
+        drawLine(dc, sx + px(4), cy - px(3), sx + px(9), cy - px(7));
+        drawLine(dc, sx + px(9), cy - px(7), sx + px(9), cy + px(7));
+        drawLine(dc, sx + px(9), cy + px(7), sx + px(4), cy + px(3));
         if (audio_.muted()) {
-            // A slash across the bars: the machine is silent.
-            drawLine(dc, signal.left, signal.bottom - px(4), signal.right,
-                     signal.bottom - px(4), kBlack);
-            drawLine(dc, signal.left, signal.bottom - px(4) - px(10),
-                     signal.right, signal.bottom - px(4) + px(2), kWhite);
+            drawLine(dc, sx + px(13), cy - px(4), sx + px(20), cy + px(4));
+            drawLine(dc, sx + px(20), cy - px(4), sx + px(13), cy + px(4));
+        } else {
+            drawLine(dc, sx + px(13), cy - px(4), sx + px(16), cy);
+            drawLine(dc, sx + px(16), cy, sx + px(13), cy + px(4));
+            drawLine(dc, sx + px(18), cy - px(7), sx + px(22), cy);
+            drawLine(dc, sx + px(22), cy, sx + px(18), cy + px(7));
         }
         if (hot(MenuPart::Signal)) {
             drawDashedRect(dc, signal, px(2), px(2));
@@ -3085,15 +3083,9 @@ private:
         screw(outer.left + px(11), outer.bottom - px(11));
         screw(outer.right - px(11), outer.bottom - px(11));
 
-        const int textH = textHeight(dc, smallFont_);
-        const int topBezel = screen.top - outer.top;
-        drawTextCentered(dc, smallFont_, L"SOLVE ET COAGULA", width / 2,
-                         outer.top + (topBezel - textH) / 2, kWhite);
         const int bottomBezel = outer.bottom - screen.bottom;
-        drawTextCentered(dc, smallFont_, L"ANAISE  //  MODEL A-13", width / 2,
-                         screen.bottom + (bottomBezel - textH) / 2, kWhite);
 
-        // Vent slots flanking the name plate.
+        // Vent slots along the lower case.
         HBRUSH vent = CreateSolidBrush(kWhite);
         const int slotY = outer.bottom - px(13);
         for (int i = 0; i < 6; ++i) {
@@ -3157,46 +3149,12 @@ private:
         RECT all{0, 0, width, height};
         fillColor(dc, all, kBlack);
 
-        // The seraphim owns the startup screen outright; every screen after it
-        // hangs the slowly turning ring pattern behind the interface. The menu
-        // lets the pattern run edge to edge inside the monitor glass, with only
-        // the shell drawn over it; the other rooms fade it under their headers.
-        if (screen_ != Screen::Splash) {
-            if (screen_ == Screen::Menu) {
-                if (!backgroundHidden_) {
-                    background_.draw(dc, width, height, nowMs());
-                }
-            } else {
-                const int scale = static_cast<int>(dpi_);
-                const int logoCell = std::max(2, MulDiv(5, scale, 96));
-                const int headerBand = MulDiv(34, scale, 96) +
-                                       logoCell * kLogoGrid +
-                                       MulDiv(26, scale, 96);
-                const int footerBand = MulDiv(56, scale, 96);
-                background_.draw(dc, width, height, nowMs(), headerBand,
-                                 footerBand);
-            }
+        if (screen_ != Screen::Splash && !backgroundHidden_) {
+            background_.draw(dc, width, height, nowMs());
         }
-
         ensureFonts();
-
-        switch (screen_) {
-            case Screen::Splash:
-                paintSplash(dc, width, height);
-                break;
-            case Screen::Menu:
-                paintMenu(dc, width, height);
-                break;
-            case Screen::Library:
-                paintLibrary(dc, width, height);
-                break;
-            case Screen::Paint:
-                paintPaintScreen(dc, width, height);
-                break;
-            case Screen::Browser:
-                paintBrowser(dc, width, height);
-                break;
-        }
+        if (screen_ == Screen::Splash) paintSplash(dc, width, height);
+        else paintMenu(dc, width, height);
 
         BitBlt(screen, 0, 0, width, height, dc, 0, 0, SRCCOPY);
         SelectObject(dc, oldBitmap);
@@ -3295,9 +3253,11 @@ private:
             }
             DeleteObject(scan);
 
-            paintMenuBar(dc, layout);
-            paintAppPanel(dc, layout);
-            paintAppWindow(dc, layout);
+            paintDesktopIcons(dc, layout);
+            for (int index : windowOrder_) {
+                if (appWindows_[index].open && !appWindows_[index].minimized)
+                    paintDesktopApp(dc, index);
+            }
             paintTaskBar(dc, layout);
             RestoreDC(dc, saved);
         }
@@ -3988,12 +3948,75 @@ private:
         drawWalker(dc, room);
     }
 
+    void paintPainterWallpaper(HDC dc, int width, int height) const {
+        const int tileWidth = px(240), tileHeight = px(82);
+        BITMAPINFO info{};
+        info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        info.bmiHeader.biWidth = tileWidth;
+        info.bmiHeader.biHeight = -tileHeight;
+        info.bmiHeader.biPlanes = 1;
+        info.bmiHeader.biBitCount = 32;
+        info.bmiHeader.biCompression = BI_RGB;
+        void* bits = nullptr;
+        HBITMAP bitmap = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &bits, nullptr, 0);
+        if (!bitmap || !bits) {
+            if (bitmap) DeleteObject(bitmap);
+            return;
+        }
+        HDC tile = CreateCompatibleDC(dc);
+        if (!tile) {
+            DeleteObject(bitmap);
+            return;
+        }
+        HGDIOBJ old = SelectObject(tile, bitmap);
+        RECT bounds{0, 0, tileWidth, tileHeight};
+        fillColor(tile, bounds, kBlack);
+        HFONT lettering = CreateFontW(-px(34), 0, 0, 0, FW_BOLD, FALSE,
+            FALSE, FALSE, HEBREW_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_ROMAN, L"David");
+        HGDIOBJ oldFont = SelectObject(tile, lettering);
+        SetTextColor(tile, kWhite);
+        SetBkMode(tile, TRANSPARENT);
+        // Hebrew rendering of "dissolve and solidify", in logical RTL order.
+        RECT text{px(12), px(6), tileWidth - px(12), px(52)};
+        DrawTextW(tile, L"\u05d4\u05de\u05e1 \u05d5\u05d2\u05d1\u05e9", -1, &text,
+                  DT_CENTER | DT_SINGLELINE | DT_RTLREADING | DT_NOPREFIX);
+        const int cx = tileWidth / 2, y = px(65), r = px(5);
+        drawLine(tile, px(42), y, cx - px(18), y);
+        drawLine(tile, cx + px(18), y, tileWidth - px(42), y);
+        drawLine(tile, cx - r, y, cx, y - r);
+        drawLine(tile, cx, y - r, cx + r, y);
+        drawLine(tile, cx + r, y, cx, y + r);
+        drawLine(tile, cx, y + r, cx - r, y);
+        GdiFlush();
+        auto* pixels = static_cast<std::uint32_t*>(bits);
+        // Cut the lettering into an etched stipple, staying purely binary.
+        for (int row = 0; row < tileHeight; ++row) {
+            for (int col = 0; col < tileWidth; ++col) {
+                if ((col + row * 2) % 4 != 0)
+                    pixels[static_cast<std::size_t>(row) * tileWidth + col] = 0;
+            }
+        }
+        for (int row = 0, yTop = 0; yTop < height; ++row, yTop += tileHeight) {
+            const int offset = (row & 1) ? tileWidth / 2 : 0;
+            for (int x = -offset; x < width; x += tileWidth)
+                BitBlt(dc, x, yTop, tileWidth, tileHeight, tile, 0, 0, SRCCOPY);
+        }
+        SelectObject(tile, oldFont);
+        DeleteObject(lettering);
+        SelectObject(tile, old);
+        DeleteDC(tile);
+        DeleteObject(bitmap);
+    }
+
     void paintPaintScreen(HDC dc, int width, int height) {
         const int scale = static_cast<int>(dpi_);
         const int margin = MulDiv(34, scale, 96);
         const int logoCell = std::max(2, MulDiv(4, scale, 96));
         int ruleY = 0;
         int titleY = 0;
+        paintPainterWallpaper(dc, width, height);
+        fillColor(dc, RECT{0, 0, width, margin + logoCell * kLogoGrid + px(24)}, kBlack);
         drawHeader(dc, width, L"PAINTER", headingFont_, logoCell, ruleY,
                    titleY);
 
@@ -4971,57 +4994,9 @@ private:
     void paintBrowser(HDC dc, int width, int height) {
         const int scale = static_cast<int>(dpi_);
         auto px = [scale](int value) { return MulDiv(value, scale, 96); };
-        const int margin = px(34);
-        const int logoCell = std::max(2, px(5));
-        int ruleY = 0;
-        int titleY = 0;
-        drawHeader(dc, width, L"VEIL", titleFont_, logoCell, ruleY, titleY);
-        drawTextAt(dc, smallFont_, L"NETWORK  /  NO CARRIER  /  03:33",
-                   width - margin, titleY, kWhite, TA_RIGHT | TA_TOP);
-
         const BrowserLayout layout = browserLayout(width, height);
-        const RECT& window = layout.window;
-        fillColor(dc, window, kBlack);
-        strokeRect(dc, window, kWhite, 1);
-
-        // Window title bar, with the page it is pretending to show.
-        fillColor(dc, layout.title, kBlack);
-        drawLine(dc, layout.title.left, layout.title.bottom - 1,
-                 layout.title.right, layout.title.bottom - 1);
-        const int iconCell = std::max(1, px(1));
-        const int iconPixels = 16 * iconCell;
-        const int iconLeft = layout.title.left + px(7);
-        const int iconTop = layout.title.top +
-                            (layout.title.bottom - layout.title.top -
-                             iconPixels) / 2;
-        drawGlyph(dc, appIconRows(2), iconLeft, iconTop, iconCell, kWhite);
-        const int titleH = textHeight(dc, bodyFont_);
-        const std::wstring windowTitle =
-            std::wstring(L"VEIL.EXE  -  ") + kSites[browserPage_].title +
-            L"  -  NOT SECURE";
-        const int titleTextY = layout.title.top +
-                               (layout.title.bottom - layout.title.top -
-                                titleH) / 2;
-        const int savedTitle = SaveDC(dc);
-        IntersectClipRect(dc, iconLeft + iconPixels + px(8), layout.title.top,
-                          layout.title.right - px(70), layout.title.bottom);
-        drawTextAt(dc, bodyFont_, windowTitle,
-                   iconLeft + iconPixels + px(8), titleTextY, kWhite);
-        RestoreDC(dc, savedTitle);
-        const int box = px(10);
-        const int boxTop = layout.title.top +
-                           (layout.title.bottom - layout.title.top - box) / 2;
-        for (int i = 0; i < 3; ++i) {
-            const int left = layout.title.right - px(7) - (i + 1) * px(14);
-            RECT control{left, boxTop, left + box, boxTop + box};
-            strokeRect(dc, control, kWhite, 1);
-            if (i == 0) {
-                drawLine(dc, control.left + px(2), control.top + px(2),
-                         control.right - px(2), control.bottom - px(2));
-                drawLine(dc, control.right - px(2), control.top + px(2),
-                         control.left + px(2), control.bottom - px(2));
-            }
-        }
+        fillColor(dc, layout.window, kBlack);
+        strokeRect(dc, layout.window, kWhite, 1);
 
         // History tabs, which are the fifteen pages in the order they were found.
         for (int i = 0; i < kBrowserPages; ++i) {
@@ -5178,6 +5153,16 @@ private:
     int menuHotIndex_ = -1;
     bool startMenuVisible_ = false;
     bool backgroundHidden_ = false;
+    std::array<AppWindow, 3> appWindows_{};
+    std::array<int, 3> windowOrder_{{0, 1, 2}};
+    std::array<POINT, kMenuItems> iconPositions_{};
+    std::array<bool, kMenuItems> iconPlaced_{};
+    int pressedIcon_ = -1;
+    bool iconDragged_ = false;
+    RECT iconDragBounds_{};
+    int draggingApp_ = -1;
+    POINT dragStart_{};
+    RECT dragBounds_{};
 
     anaise::RingBackground background_;
 
@@ -5227,6 +5212,7 @@ int runHeadless(HINSTANCE instance, const HeadlessOptions& options) {
                             options.dpi)) {
         return 1;
     }
+    if (options.checkWindows) return app.checkWindowInteractions() ? 0 : 1;
     if (!ensureDirectory(options.outDir)) return 1;
 
     static const Screen kScreens[] = {Screen::Splash, Screen::Menu,

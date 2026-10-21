@@ -180,11 +180,10 @@ private:
         circles_.clear();
         chords_.clear();
 
-        const double minSide = std::min(width, height);
-        const double cx =
-            width * 0.5 + std::sin(time * 0.11) * minSide * 0.014;
-        const double cy =
-            height * 0.52 + std::cos(time * 0.13) * minSide * 0.011;
+        // Device-space wallpaper: resizing crops/reveals instead of recentering.
+        const double unit = 1.0 / scale_;
+        const double cx = (540.0 + std::sin(time * 0.11) * 10.0) * unit;
+        const double cy = (385.0 + std::cos(time * 0.13) * 8.0) * unit;
         const double breath = 1.0 + 0.024 * std::sin(time * 0.31);
 
         // How many circles make each ring, outermost first. The counts grow
@@ -197,7 +196,7 @@ private:
         // outermost circles rather than just their centres.
         const double outerSpread = std::sqrt(2.0) *
                                    std::sin(kPi / kRingCounts[0]);
-        const double envelope = minSide * 0.60 * breath;
+        const double envelope = 680.0 * unit * breath;
         double distance = envelope / (1.0 + outerSpread);
         double phase = 0.0;
 

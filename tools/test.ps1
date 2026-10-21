@@ -213,6 +213,10 @@ Check 'invalid browser page rejected' ($exitCode -ne 0) "exit $exitCode"
 $exitCode = Invoke-Render @('--headless', '--check-audio')
 Check 'embedded music parses' ($exitCode -eq 0) "exit $exitCode"
 
+# In-process, offscreen input regression: no native window is created.
+$exitCode = Invoke-Render @('--headless', '--check-windows')
+Check 'desktop icons move without launching; app windows and content input work' ($exitCode -eq 0) "exit $exitCode"
+
 Write-Host ''
 if ($script:failures.Count -eq 0) {
     Write-Host "All $($script:checks) headless checks passed."

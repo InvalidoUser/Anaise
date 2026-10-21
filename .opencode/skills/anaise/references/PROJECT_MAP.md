@@ -66,10 +66,24 @@ powershell -ExecutionPolicy Bypass -File .opencode\skills\anaise\scripts\map.ps1
 
 ## Screen flow
 
-`Splash` (auto after `kSplashRevealMs` + hold, or any key/click) -> `Menu`
-(3 items: Bethelament, Painter, Shutdown) -> `Library` or `Paint` -> `Esc` back
-to `Menu`. `F11` / `Alt+Enter` toggles fullscreen everywhere; `Esc` leaves it
-before it leaves the screen.
+`Splash` -> `Menu` desktop, initially with no open apps. Icons launch Library,
+Paint and Browser in independent windows; `screen_` tracks the focused app or
+Menu when the desktop is focused. `appWindows_` retains open/minimized/maximized
+state and bounds; `windowOrder_` stores back-to-front stacking. Content renders
+offscreen, then copies into the window body; `contentPoint()` maps mouse input
+back into that content surface. Taskbar tabs restore/switch or minimize the
+active app. Title controls close only their app, maximize/restore, or minimize;
+titles drag with capture. Desktop icons also drag with capture; a short press
+launches on release, while a drag only changes the session's icon position.
+`iconPositions_` stores DPI-independent offsets, clamped by `menuLayout()`.
+The top bar and programs panel are gone; the clock and speaker are on the lower
+bar. Painter tiles RTL Hebrew lettering outside its opaque canvas.
+`Esc` minimizes the app. Native fullscreen uses
+`F11` / `Alt+Enter`; `Esc` leaves fullscreen first.
+
+`--check-windows` exercises window lifecycle, stacking, dragging, resizing and
+Painter/Veil input routing entirely offscreen. Headless screen captures open
+only the requested app; the menu capture has no open apps.
 
 ## Rendering rules (the part that gets broken)
 
@@ -137,20 +151,20 @@ fit at this size; the map above beats a BFS over 342 nodes.
 
 ```
 L404   headless
-L1242  window
-L1552  browser
-L1665  bethelament
-L1766  mouse
-L2151  veil
-L2252  painting
-L2373  fullscreen
-L2404  drawing
-L3308  bethelament art & layout
-L3463  pilgrim light
-L3587  room lens
-L4047  veil
-L4585  veil pages
-L5146  members
+L1407  window
+L1727  browser
+L1840  bethelament
+L1941  mouse
+L2295  veil
+L2393  painting
+L2513  fullscreen
+L2544  drawing
+L3268  bethelament art & layout
+L3423  pilgrim light
+L3547  room lens
+L4070  veil
+L4608  veil pages
+L5121  members
 ```
 
 ### Symbols
@@ -203,109 +217,122 @@ L441   appendBigEndian(std::vector<std::uint8_t>& out, std::uint32_t value)
 L457   pngAdler32(const std::uint8_t* data, std::size_t size)
 L542   ensureDirectory(const std::wstring& path)
 L559   struct HeadlessOptions
-L577   splitCommandLine(const wchar_t* commandLine)
-L600   parseNumber(const std::wstring& text, ULONGLONG& value)
-L609   parseHeadlessOptions(const wchar_t* commandLine, HeadlessOptions& options)
-L702   class App
-L714     .create(HINSTANCE instance)
-L779     .createHeadless(HINSTANCE instance, int width, int height, UINT dpi)
-L900   struct VeilSite
-L1073    .appIconRows(int index)
-L1154  enum class MenuPart
-L1170  struct MenuHit
-L1175  struct MenuLayout
-L1205  struct GridLayout
-L1211  struct BrowserLayout
-L1224  struct RoomLayout
-L1230  struct Walker
-L1258    .handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
-L1457    .tickSplash()
-L1466    .tickFrame()
-L1474    .enterMenu()
-L1492    .openScreen(Screen screen)
-L1535    .activateMenuItem()
-L1553    .browserGo(int page)
-L1562    .browserFollowLink()
-L1570    .browserReload()
-L1577    .browserLoading()
-L1582    .handleKey(int key)
-L1646    .directionForKey(int key)
-L1666    .roomWalkable(int col, int row)
-L1674    .heldDirection()
-L1692    .stopWalker()
-L1704    .tickGame()
-L1715    .updateWalker(double elapsed)
-L1767    .onMouseMove(int x, int y)
-L1819    .onMouseDown(bool leftButton, int x, int y)
-L1917    .onMouseUp()
-L1925    .menuHitAt(int x, int y)
-L1976    .menuLayout(int width, int height)
-L2145    .menuItemRect(int index, int width, int height)
-L2152    .browserLayout(int width, int height)
-L2221    .browserLinkRect(const BrowserLayout& layout)
-L2233    .browserHitAt(int x, int y)
-L2253    .paintLayout(int width, int height)
-L2275    .paintCellAt(int x, int y, int& col, int& row)
-L2288    .paintTo(int x, int y)
-L2306    .stampBrush(int col, int row, bool erase)
-L2321    .paintLine(int x0, int y0, int x1, int y1, bool erase)
-L2342    .pushUndo()
-L2349    .undoCanvas()
-L2358    .redoCanvas()
-L2367    .clearCanvas()
-L2374    .setFullscreen(bool on)
-L2407    .nowMs()
-L2411    .releaseFonts()
-L2423    .ensureFonts()
-L2451    .textWidth(HDC dc, HFONT font, const std::wstring& text)
-L2460    .textHeight(HDC dc, HFONT font)
-L2501    .fillColor(HDC dc, const RECT& rect, COLORREF color)
-L2544    .fillDither(HDC dc, const RECT& rect, int level)
-L2643    .clockText()
-L2652    .hot(MenuPart part, int index = -1)
-L2656    .paintMenuBar(HDC dc, const MenuLayout& layout)
-L2706    .drawSigil(HDC dc, int cx, int cy, int radius)
-L2746    .paintAppPanel(HDC dc, const MenuLayout& layout)
-L2786    .paintAppWindow(HDC dc, const MenuLayout& layout)
-L2818  struct WindowButton
-L2953    .paintTaskBar(HDC dc, const MenuLayout& layout)
-L3029    .paintStartMenu(HDC dc, const MenuLayout& layout)
-L3051    .paintBezel(HDC dc, const MenuLayout& layout, int width, int height)
-L3143    .paint(HDC screen)
-L3149    .paintInto(HDC screen, int width, int height)
-L3207    .paintSplash(HDC dc, int width, int height)
-L3278    .paintMenu(HDC dc, int width, int height)
-L3309    .roomLayout(int width, int height)
-L3348    .drawRoom(HDC dc, const RoomLayout& room)
-L3431  struct WalkerGeometry
-L3442    .walkerGeometry(const RoomLayout& room)
-L3470    .walkerSourcePixel(int col, int row, int facing, int pose)
-L3530    .ensureWalkerSurface(int width, int height)
-L3569    .releaseWalkerSurface()
-L3592    .ensureRoomSurface(int width, int height)
-L3627    .releaseRoomSurface()
-L3643    .bendRoom(int centerX, int centerY, int radius, double strength)
-L3668  constexpr kRippleSteps
-L3763    .drawWalker(HDC dc, const RoomLayout& room)
-L3951    .paintLibrary(HDC dc, int width, int height)
-L3991    .paintPaintScreen(HDC dc, int width, int height)
-L4048    .browserNoise(int x, int y, int seed)
-L4167    .drawMarquee(HDC dc, const RECT& bar, const std::wstring& message)
-L4225    .drawPixel404(HDC dc, const RECT& page)
-L4241    .paintGamePage(HDC dc, const RECT& page, bool compact)
-L4335    .paintBaelPage(HDC dc, const RECT& page, bool compact)
-L4405    .paintOrderPage(HDC dc, const RECT& page, bool compact)
-L4485    .paintGoatPage(HDC dc, const RECT& page, bool compact)
-L4540    .paint404Page(HDC dc, const RECT& page, bool compact)
-L4589    .px(int value)
-L4617    .factBoxHeight(HDC dc, const wchar_t* facts)
-L4627    .drawFactBox(HDC dc, const wchar_t* facts, const RECT& box)
-L4686    .drawHitCounter(HDC dc, int x, int y, int value, int digits)
-L4838    .paintGuestbookPage(HDC dc, const RECT& page, bool compact)
-L4918    .paintBrowserLoading(HDC dc, const BrowserLayout& layout)
-L4949    .paintBrowserLink(HDC dc, const BrowserLayout& layout)
-L4971    .paintBrowser(HDC dc, int width, int height)
-L5224  runHeadless(HINSTANCE instance, const HeadlessOptions& options)
-L5257  wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int)
+L578   splitCommandLine(const wchar_t* commandLine)
+L601   parseNumber(const std::wstring& text, ULONGLONG& value)
+L610   parseHeadlessOptions(const wchar_t* commandLine, HeadlessOptions& options)
+L707   class App
+L719     .create(HINSTANCE instance)
+L784     .createHeadless(HINSTANCE instance, int width, int height, UINT dpi)
+L861     .checkWindowInteractions()
+L971   struct VeilSite
+L1144    .appIconRows(int index)
+L1225  enum class MenuPart
+L1237  struct MenuHit
+L1242  struct MenuLayout
+L1265  struct AppWindow
+L1272    .invalidate()
+L1276    .windowAt(int x, int y)
+L1285    .shellClient()
+L1291    .appScreen(int index)
+L1296    .activeApp()
+L1301    .appWindowLayout(int index)
+L1333    .contentClient(int index)
+L1339    .contentPoint(int& x, int& y)
+L1350    .focusApp(int index)
+L1356    .dismissApp(bool close)
+L1370  struct GridLayout
+L1376  struct BrowserLayout
+L1389  struct RoomLayout
+L1395  struct Walker
+L1423    .handleMessage(UINT message, WPARAM wParam, LPARAM lParam)
+L1626    .tickSplash()
+L1635    .tickFrame()
+L1643    .enterMenu()
+L1661    .openScreen(Screen screen)
+L1710    .activateMenuItem()
+L1728    .browserGo(int page)
+L1737    .browserFollowLink()
+L1745    .browserReload()
+L1752    .browserLoading()
+L1757    .handleKey(int key)
+L1821    .directionForKey(int key)
+L1841    .roomWalkable(int col, int row)
+L1849    .heldDirection()
+L1867    .stopWalker()
+L1879    .tickGame()
+L1890    .updateWalker(double elapsed)
+L1942    .onMouseMove(int x, int y)
+L2038    .onMouseDown(bool leftButton, int x, int y)
+L2151    .onMouseUp()
+L2166    .menuHitAt(int x, int y)
+L2205    .menuLayout(int width, int height)
+L2289    .menuItemRect(int index, int width, int height)
+L2296    .browserLayout(int width, int height)
+L2363    .browserLinkRect(const BrowserLayout& layout)
+L2375    .browserHitAt(int x, int y)
+L2394    .paintLayout(int width, int height)
+L2416    .paintCellAt(int x, int y, int& col, int& row)
+L2428    .paintTo(int x, int y)
+L2446    .stampBrush(int col, int row, bool erase)
+L2461    .paintLine(int x0, int y0, int x1, int y1, bool erase)
+L2482    .pushUndo()
+L2489    .undoCanvas()
+L2498    .redoCanvas()
+L2507    .clearCanvas()
+L2514    .setFullscreen(bool on)
+L2547    .nowMs()
+L2551    .releaseFonts()
+L2563    .ensureFonts()
+L2591    .textWidth(HDC dc, HFONT font, const std::wstring& text)
+L2600    .textHeight(HDC dc, HFONT font)
+L2641    .fillColor(HDC dc, const RECT& rect, COLORREF color)
+L2684    .fillDither(HDC dc, const RECT& rect, int level)
+L2783    .clockText()
+L2792    .hot(MenuPart part, int index = -1)
+L2799    .drawSigil(HDC dc, int cx, int cy, int radius)
+L2839    .paintDesktopIcons(HDC dc, const MenuLayout& layout)
+L2871    .paintAppWindow(HDC dc, const MenuLayout& layout, int index)
+L2901  struct WindowButton
+L2939    .paintDesktopApp(HDC dc, int index)
+L2960    .paintTaskBar(HDC dc, const MenuLayout& layout)
+L3027    .paintStartMenu(HDC dc, const MenuLayout& layout)
+L3049    .paintBezel(HDC dc, const MenuLayout& layout, int width, int height)
+L3135    .paint(HDC screen)
+L3141    .paintInto(HDC screen, int width, int height)
+L3165    .paintSplash(HDC dc, int width, int height)
+L3236    .paintMenu(HDC dc, int width, int height)
+L3269    .roomLayout(int width, int height)
+L3308    .drawRoom(HDC dc, const RoomLayout& room)
+L3391  struct WalkerGeometry
+L3402    .walkerGeometry(const RoomLayout& room)
+L3430    .walkerSourcePixel(int col, int row, int facing, int pose)
+L3490    .ensureWalkerSurface(int width, int height)
+L3529    .releaseWalkerSurface()
+L3552    .ensureRoomSurface(int width, int height)
+L3587    .releaseRoomSurface()
+L3603    .bendRoom(int centerX, int centerY, int radius, double strength)
+L3628  constexpr kRippleSteps
+L3723    .drawWalker(HDC dc, const RoomLayout& room)
+L3911    .paintLibrary(HDC dc, int width, int height)
+L3951    .paintPainterWallpaper(HDC dc, int width, int height)
+L4012    .paintPaintScreen(HDC dc, int width, int height)
+L4071    .browserNoise(int x, int y, int seed)
+L4190    .drawMarquee(HDC dc, const RECT& bar, const std::wstring& message)
+L4248    .drawPixel404(HDC dc, const RECT& page)
+L4264    .paintGamePage(HDC dc, const RECT& page, bool compact)
+L4358    .paintBaelPage(HDC dc, const RECT& page, bool compact)
+L4428    .paintOrderPage(HDC dc, const RECT& page, bool compact)
+L4508    .paintGoatPage(HDC dc, const RECT& page, bool compact)
+L4563    .paint404Page(HDC dc, const RECT& page, bool compact)
+L4612    .px(int value)
+L4640    .factBoxHeight(HDC dc, const wchar_t* facts)
+L4650    .drawFactBox(HDC dc, const wchar_t* facts, const RECT& box)
+L4709    .drawHitCounter(HDC dc, int x, int y, int value, int digits)
+L4861    .paintGuestbookPage(HDC dc, const RECT& page, bool compact)
+L4941    .paintBrowserLoading(HDC dc, const BrowserLayout& layout)
+L4972    .paintBrowserLink(HDC dc, const BrowserLayout& layout)
+L4994    .paintBrowser(HDC dc, int width, int height)
+L5209  runHeadless(HINSTANCE instance, const HeadlessOptions& options)
+L5243  wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int)
 ```
 <!-- map:end -->

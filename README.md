@@ -12,7 +12,7 @@ nothing is written to disk.
 
 The desktop, captured directly from the app at 1080 x 740:
 
-![Anaise desktop with ring wallpaper, app icons and a Finder window](docs/screenshots/menu.png)
+![Anaise desktop with ring wallpaper, app icons and no open apps](docs/screenshots/menu.png)
 
 | Startup seraphim | Bethelament |
 | --- | --- |
@@ -146,11 +146,10 @@ Braille dot into a point of light.
   centre, then the title sputters on like a failing tube
 - An OS-style main menu: a dithered monitor case with screws, vents and a
   breathing power lamp around a desktop of app icons
-- Finder window, menubar and taskbar for the selected app, drawn entirely in
-  black and white; keyboard and mouse both work. The painted window controls,
-  taskbar chips, start menu, menubar sections and signal bars all act
+- Independent draggable app windows with minimize, maximize/restore and close,
+  plus a taskbar tab for each open app. The desktop starts with no apps open
 - A CC0 ambient score: an intro choir under the seraphim, a dark shrine loop on
-  the menu and a cathedral loop in the rooms. Click the signal bars, or press
+  the menu and a cathedral loop in the rooms. Click the volume icon, or press
   `M` anywhere, to mute
 - A slowly turning orthogonal ring pattern glows behind every screen except
   the startup: rings of circles that cross each other at right angles, joined
@@ -206,27 +205,25 @@ black shell.
 
 ## Main menu
 
-The menu is a small monochrome computer. A dithered case wraps the window with
-corner screws, vent slots, a nameplate and a power lamp that breathes with the
-ring pattern. Inside the glass sit a menubar, a desktop of four app icons
-(Bethelament, Painter, Veil and Shutdown), a finder window describing the
-selected app, and a taskbar with the same apps and a clock set to the witching
-hour.
+The desktop starts with no apps open. Its larger dithered case pattern reaches
+all four edges and stays anchored when the native window is resized. The ring
+wallpaper also keeps its position and scale as resizing reveals more of it.
 
-Selecting an icon inverts its plate and its label, draws an old-fashioned
-selection marquee, and fills the finder window with the app's title, purpose,
-controls and file facts. The window's occult seal is a field of single white
-pixels and short dashes rather than a filled shape, so the whole shell stays
-inside the two-colour palette. Up and down move, Enter or a click opens, and
-Esc closes the machine from the menu.
+Click a desktop icon or use Up/Down and Enter to launch an app. Drag an icon
+to arrange it anywhere on the desktop; dropping it does not launch the app.
+Positions last for the current session and stay inside the desktop on resize.
+Each app opens inside its own window. Drag its title bar to move it, use the
+three title buttons to minimize, maximize/restore or close it, and click its
+taskbar tab to switch to it or restore it. Clicking the active tab minimizes
+that app. Minimized apps keep their canvas, room and browser state. Closing an
+app removes its tab; closing an in-game window leaves the machine running.
+`Esc` minimizes the focused app. Shutdown or the native close button exits.
 
-Every piece of chrome that looks like a control works. The start plate opens a
-start menu, the taskbar chips open their app, and the window's close, zoom and
-minimise boxes quit, maximise and minimise. `PROGRAMS` opens the selected app,
-`ROOMS` goes straight to Bethelament, `LIGHT` hides or restores the ring
-wallpaper, and the signal bars at the right of the taskbar mute the music
-(pressing `M` does the same from any screen).
-Hovering any of them marks it with a dashed marquee or an underline.
+The desktop has no top menu bar or border lettering. The small logo button
+opens the app menu. The clock and clickable volume icon sit at the bottom
+right; click the speaker or press `M` to mute. Painter has a staggered, etched
+Hebrew wallpaper spelling "dissolve and solidify" around its black canvas.
+Keyboard instructions are kept out of the in-game interface.
 
 ## Music
 
@@ -255,7 +252,7 @@ the app. A small hooded pilgrim walks it the way an RPG Maker character moves:
 one tile per step, four facings, and a three-frame walk cycle (left step,
 standing, right step) that falls back to the standing frame when they stop.
 Holding two directions walks in the one pressed last, and the walls and
-bookcases block the way. `Esc` returns to the menu.
+bookcases block the way. `Esc` minimizes the room window.
 
 While a step is in flight the pilgrim turns into light: the silhouette leaves a
 short afterimage along the axis it is walking on, never across it, and sits in a
@@ -281,7 +278,7 @@ and the rest of the crawl.
 The chrome is a tab strip, back and forward arrows, a reload plate, an address
 bar and one link per page. Arrow keys and the mouse wheel turn the tabs, `Tab`
 and the link plate follow the page's link, `1`-`9` and `0` jump to a tab,
-`Home` and `End` go to the first and last page, `R` reloads, and `Esc` leaves.
+`Home` and `End` go to the first and last page, `R` reloads, and `Esc` minimizes the browser.
 Every page spends a moment contacting its host behind a dithered progress bar
 before it paints, and the reload plate repeats that wait. Hovering a control
 draws a hand cursor and inverts the plate.
