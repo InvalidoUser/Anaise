@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -18,9 +19,11 @@ public:
 
     void reset() {
         body_ = {{5, 8}, {4, 8}, {3, 8}, {2, 8}};
-        dir_ = queued_ = 1;
-        score_ = 0; person_ = 0; seed_ = 17;
-        started_ = paused_ = dead_ = won_ = turned_ = false;
+        prevBody_ = body_;
+        dir_ = 1; turns_.clear(); trail_.clear();
+        score_ = 0; points_ = 0; person_ = 0; seed_ = 17; sinceSpawn_ = 0;
+        started_ = paused_ = dead_ = won_ = false;
+        frac_ = 1; deathAge_ = 0; gain_ = 0; gainAge_ = 99999; jam_ = false; drips_ = 0; bonus_ = false;
         clock_ = debt_ = impact_ = cinemaAge_ = 0;
         cinematic_ = sounded_ = false; pendingGroan_ = -1;
         target_ = {14, 8}; oldTarget_ = target_;
@@ -35,21 +38,23 @@ public:
             debt_ = 0;
             return;
         }
-        if (cinematic_) return;
+        if (cinematic_ || dead_ || won_) return;
         int next = key == VK_UP || key == 'W' ? 0 :
                    key == VK_RIGHT || key == 'D' ? 1 :
                    key == VK_DOWN || key == 'S' ? 2 :
                    key == VK_LEFT || key == 'A' ? 3 : -1;
-        if (next >= 0 && !turned_ && (next + 2) % 4 != dir_) {
-            queued_ = next; turned_ = true;
-        }
+        // Two turns can be buffered inside one tick, so quick corners land.
+        const int last = turns_.empty() ? dir_ : turns_.back();
+        if (next >= 0 && turns_.size() < 2 && next != last && (next + 2) % 4 != last) turns_.push_back(next);
     }
 
     void update(ULONGLONG now, bool focused) {
         const ULONGLONG elapsed = clock_ && now >= clock_ ? std::min<ULONGLONG>(now - clock_, 250) : 0;
         clock_ = now;
         if (!focused) { if (started_) paused_ = true; debt_ = 0; return; }
-        if (!started_ || paused_ || dead_ || won_) { debt_ = 0; return; }
+        gainAge_ = std::min<ULONGLONG>(99999, gainAge_ + elapsed);
+        if (dead_) deathAge_ = std::min<ULONGLONG>(99999, deathAge_ + elapsed);
+        if (!started_ || paused_ || dead_ || won_) { debt_ = 0; frac_ = 1; return; }
         if (cinematic_) {
             cinemaAge_ = std::min(cinematicMs, cinemaAge_ + elapsed);
             if (cinemaAge_ >= contactMs && !sounded_) {
@@ -57,14 +62,19 @@ public:
             }
             if (cinemaAge_ >= cinematicMs) {
                 cinematic_ = false; impact_ = 0; person_ = (person_ + 1) % 3;
-                queued_ = dir_; turned_ = false; debt_ = 0; spawn();
+                turns_.clear(); debt_ = 0; prevBody_ = body_; frac_ = 1; spawn();
             }
             return;
         }
         debt_ += elapsed;
-        const ULONGLONG interval = std::max(65, 170 - score_ * 5);
+        const ULONGLONG interval = tick();
         while (debt_ >= interval && !dead_ && !won_ && !cinematic_) { debt_ -= interval; step(); }
+        frac_ = cinematic_ || dead_ ? 1.0 : std::min(1.0, double(debt_) / interval);
     }
+
+    // True once when the drill jams, so the host can play the crunch.
+    bool takeJam() { const bool j = jam_; jam_ = false; return j; }
+    int best() const { return best_; }
 
     bool cinematic() const { return cinematic_; }
     bool paused() const { return paused_; }
@@ -82,23 +92,47 @@ public:
             return;
         }
         const int cell = std::max(1, std::min((width - (width >= 650 ? 180 : 24)) / cols, (height - 108) / rows));
-        const int left = (width - (width >= 650 ? 160 : 0) - cols * cell) / 2, top = 65;
+        // A jammed drill shakes the whole board for a moment.
+        const bool jamming = dead_ && deathAge_ < 900;
+        const int shake = jamming ? int(((deathAge_ / 40) % 3) - 1) * std::max(2, cell / 6) : 0;
+        const int left = (width - (width >= 650 ? 160 : 0) - cols * cell) / 2 + shake, top = 65;
         HFONT font = CreateFontW(std::clamp(cell / 2 + 4, 10, 18), 0, 0, 0, FW_NORMAL,
             FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             NONANTIALIASED_QUALITY, FIXED_PITCH, L"Consolas");
         SelectObject(dc, font);
         auto text = [&](int x, int y, const std::wstring& value) { TextOutW(dc, x, y, value.c_str(), int(value.size())); };
+        auto fill = [&](int x0, int y0, int x1, int y1) {
+            RECT r{std::min(x0, x1), std::min(y0, y1), std::max(x0, x1), std::max(y0, y1)};
+            FillRect(dc, &r, static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
+        };
         text(left, 10, L"S N A K E  /  DRILL HEAD");
-        text(left, 34, L"LEVEL " + std::to_wstring(score_ + 1) + L"   BORED: " + std::to_wstring(score_) + L"   LENGTH: " + std::to_wstring(body_.size()) +
-             L"   TICK: " + std::to_wstring(std::max(65, 170 - score_ * 5)) + L"ms");
+        text(left, 34, L"LEVEL " + std::to_wstring(score_ + 1) + L"   SCORE " + std::to_wstring(points_) +
+             L"   BEST " + std::to_wstring(best_) + L"   LENGTH " + std::to_wstring(body_.size()));
+        // Speed gauge: fills as the tick shortens towards its 65 ms floor.
+        {
+            const int gx = left + cols * cell - 110, gy = 36, gw = 108;
+            Rectangle(dc, gx, gy, gx + gw, gy + 12);
+            fill(gx + 2, gy + 2, gx + 2 + (gw - 4) * (170 - int(tick())) / 105, gy + 10);
+        }
         Rectangle(dc, left - 2, top - 2, left + cols * cell + 2, top + rows * cell + 2);
         for (int y = 1; y < rows; ++y) for (int x = 1; x < cols; ++x)
             SetPixelV(dc, left + x * cell, top + y * cell, RGB(255,255,255));
         auto line = [&](int x1, int y1, int x2, int y2) { MoveToEx(dc, x1, y1, nullptr); LineTo(dc, x2, y2); };
+        // Drips left behind after each bore fade over a dozen steps.
+        for (const auto& d : trail_) {
+            const int x = left + d.p.x * cell, y = top + d.p.y * cell, r = std::max(1, cell * d.life / 60);
+            const int ox = (d.p.x * 7 + d.p.y * 3) % std::max(1, cell - 4), oy = (d.p.x * 5 + d.p.y * 11) % std::max(1, cell - 4);
+            Ellipse(dc, x + 2 + ox - r, y + 2 + oy - r, x + 3 + ox + r, y + 3 + oy + r);
+            if (d.life > 6) SetPixelV(dc, x + cell / 2, y + cell / 2, RGB(255,255,255));
+        }
+        const POINT headCell = body_.front();
+        const int closeness = std::abs(headCell.x - target_.x) + std::abs(headCell.y - target_.y);
         auto face = [&](POINT p, int person, bool drilled) {
-            const int x = left + p.x * cell + cell / 2;
+            int x = left + p.x * cell + cell / 2;
             const int y = top + p.y * cell + cell / 2;
             const int w = cell * 3, h = cell * 7 / 2;
+            // Targets tremble as the drill comes close.
+            if (!drilled && closeness <= 4 && started_ && !paused_) x += int((now / 50) % 3) - 1;
             drawPortrait(dc, person % 3, x-w/2, y-cell/2, w, h, drilled, impact_);
             if (!drilled) {
                 const int radius = std::max(3, cell/3 + int((now/180)%2));
@@ -116,20 +150,65 @@ public:
         };
         if (impact_) face(oldTarget_, (person_ + 2) % 3, true);
         if (!won_) face(target_, person_, false);
-        for (std::size_t i = body_.size(); i-- > 0;) {
-            int x = left + body_[i].x*cell, y = top + body_[i].y*cell;
-            RECT tile{x+2,y+2,x+cell-1,y+cell-1}; FillRect(dc,&tile,static_cast<HBRUSH>(GetStockObject(WHITE_BRUSH)));
-            SetDCPenColor(dc, RGB(0,0,0));
-            if (i) line(x+cell/2,y+3,x+cell/2,y+cell-2);
-            else {
-                // Spiral teeth on the drill head rotate in two crisp phases.
-                for(int j=3;j<cell-2;j+=5) {
-                    const int offset = int((now/90)%2)*2;
-                    if (dir_%2) line(x+j,y+2+offset,x+j-3,y+cell-2);
-                    else line(x+2+offset,y+j,x+cell-2,y+j-3);
+        // Segments slide between cells; the tube is drawn centre to centre.
+        const double f = frac_;
+        auto centre = [&](std::size_t i) {
+            const POINT c = body_[i], p = i < prevBody_.size() ? prevBody_[i] : c;
+            return std::pair<int, int>{left + int((p.x + (c.x - p.x) * f) * cell) + cell / 2,
+                                       top + int((p.y + (c.y - p.y) * f) * cell) + cell / 2};
+        };
+        const bool blink = jamming && (deathAge_ / 110) % 2;
+        if (!blink) {
+            for (std::size_t i = body_.size(); i-- > 0;) {
+                const auto [x, y] = centre(i);
+                const int n = int(body_.size());
+                // The tail tapers over its last three segments.
+                const int half = std::max(2, (cell - 3) / 2 - std::max(0, int(i) - (n - 4)) * std::max(1, cell / 10));
+                fill(x - half, y - half, x + half + 1, y + half + 1);
+                if (i + 1 < body_.size()) {
+                    const auto [px, py] = centre(i + 1);
+                    const int nh = std::max(2, half - 1);
+                    fill(std::min(x, px) - nh, std::min(y, py) - nh, std::max(x, px) + nh + 1, std::max(y, py) + nh + 1);
                 }
             }
+            SetDCPenColor(dc, RGB(0,0,0));
+            for (std::size_t i = 1; i < body_.size(); ++i) {
+                const auto [x, y] = centre(i);
+                const POINT a = body_[i - 1], b = body_[i];
+                if (a.y == b.y) line(x, y - cell / 2 + 3, x, y + cell / 2 - 2);
+                else line(x - cell / 2 + 3, y, x + cell / 2 - 2, y);
+            }
+            const auto [hx, hy] = centre(0);
+            // Spiral teeth on the drill head rotate in two crisp phases.
+            for (int j = 3; j < cell - 2; j += 5) {
+                const int offset = int((now / 90) % 2) * 2, x = hx - cell / 2, y = hy - cell / 2;
+                if (dir_ % 2) line(x + j, y + 2 + offset, x + j - 3, y + cell - 2);
+                else line(x + 2 + offset, y + j, x + cell - 2, y + j - 3);
+            }
             SetDCPenColor(dc, RGB(255,255,255));
+        }
+        {
+            const int dx[] = {0,1,0,-1}, dy[] = {-1,0,1,0};
+            const auto [cx, cy] = centre(0);
+            const int reach = cell + (dead_ ? 0 : int((now / 60) % 2));
+            POINT bit[] = {{cx+dx[dir_]*reach,cy+dy[dir_]*reach},
+                           {cx-dy[dir_]*cell/3,cy+dx[dir_]*cell/3},
+                           {cx+dy[dir_]*cell/3,cy-dx[dir_]*cell/3}};
+            SelectObject(dc, GetStockObject(WHITE_BRUSH)); Polygon(dc,bit,3);
+            SelectObject(dc, GetStockObject(BLACK_BRUSH));
+            if (jamming) {
+                // Sparks fly from the jammed bit.
+                const int tx = cx + dx[dir_] * cell, ty = cy + dy[dir_] * cell;
+                for (int k = 0; k < 9; ++k) {
+                    const double ang = k * 0.698 + deathAge_ * 0.013;
+                    const int r0 = cell / 3, r1 = cell / 3 + int(cell * (0.6 + 0.5 * ((k * 37 + deathAge_ / 30) % 7) / 7.0));
+                    line(tx + int(std::cos(ang) * r0), ty + int(std::sin(ang) * r0), tx + int(std::cos(ang) * r1), ty + int(std::sin(ang) * r1));
+                }
+            }
+        }
+        if (gain_ > 0 && gainAge_ < 1200 && !won_) {
+            const int gx = left + oldTarget_.x * cell, gy = top + oldTarget_.y * cell - cell - 14 - int(gainAge_ / 40);
+            text(gx, gy, L"+" + std::to_wstring(gain_) + (bonus_ ? L" QUICK" : L""));
         }
         if(width>=650) {
             const int sx=width-151;
@@ -139,27 +218,26 @@ public:
                 text(sx,top+204,L"+1 / BORED");
             } else {
                 drawPortrait(dc,person_%3,sx,top+30,128,160,false,0);
-                text(sx,top+204,L"AIM: FOREHEAD");
+                text(sx,top+204,closeness <= 4 && started_ ? L"CLOSER..." : L"AIM: FOREHEAD");
             }
-            text(sx,top+240,L"CC0 / THE MET");
+            // The quick-bore bonus drains while the target waits.
+            text(sx,top+228,L"BONUS " + std::to_wstring(quickBonus()));
+            text(sx,top+258,L"CC0 / THE MET");
         }
-        const POINT head = body_.front();
-        const int dx[] = {0,1,0,-1}, dy[] = {-1,0,1,0};
-        int cx=left+head.x*cell+cell/2, cy=top+head.y*cell+cell/2;
-        POINT bit[] = {{cx+dx[dir_]*cell,cy+dy[dir_]*cell},
-                       {cx-dy[dir_]*cell/3,cy+dx[dir_]*cell/3},
-                       {cx+dy[dir_]*cell/3,cy-dx[dir_]*cell/3}};
-        SelectObject(dc, GetStockObject(WHITE_BRUSH)); Polygon(dc,bit,3);
-        SelectObject(dc, GetStockObject(BLACK_BRUSH));
         text(left, top+rows*cell+12, L"ARROWS/WASD steer   SPACE pause   R reset");
-        if (!started_ || paused_ || dead_ || won_) {
-            RECT panel{left+cols*cell/8,top+rows*cell/2-38,left+cols*cell*7/8,top+rows*cell/2+40};
+        if ((!started_ || paused_ || dead_ || won_) && !jamming) {
+            RECT panel{left+cols*cell/8,top+rows*cell/2-46,left+cols*cell*7/8,top+rows*cell/2+48};
             Rectangle(dc,panel.left,panel.top,panel.right,panel.bottom);
             RECT title=panel; title.top+=12;
             const wchar_t* label = dead_ ? L"DRILL JAMMED" : won_ ? L"ALL BORED!" : paused_ ? L"PAUSED" : L"A NEW KIND OF SNAKE";
             DrawTextW(dc,label,-1,&title,DT_CENTER|DT_TOP|DT_SINGLELINE);
-            title.top+=26;
-            DrawTextW(dc,dead_ || won_ ? L"ENTER to retry" : started_ ? L"SPACE to resume" : L"ENTER / aim for the forehead",-1,&title,DT_CENTER|DT_TOP|DT_SINGLELINE);
+            title.top+=24;
+            const std::wstring sub = dead_ || won_
+                ? L"SCORE " + std::to_wstring(points_) + (points_ > 0 && points_ >= best_ ? L"  NEW BEST!" : L"  BEST " + std::to_wstring(best_))
+                : started_ ? L"SPACE to resume" : L"Bore fast for a bonus";
+            DrawTextW(dc,sub.c_str(),-1,&title,DT_CENTER|DT_TOP|DT_SINGLELINE);
+            title.top+=24;
+            DrawTextW(dc,dead_ || won_ ? L"ENTER to retry" : started_ ? L"" : L"ENTER / aim for the forehead",-1,&title,DT_CENTER|DT_TOP|DT_SINGLELINE);
         }
         RestoreDC(dc,saved); DeleteObject(font);
     }
@@ -188,7 +266,7 @@ public:
         // Every subsequent person gets a fresh sequence and exactly one voice.
         for(int person=1;person<=2;++person) {
             s.body_={{13,8},{12,8},{11,8},{10,8}}; s.target_={14,8};
-            s.dir_=s.queued_=1; s.step();
+            s.dir_=1; s.turns_.clear(); s.step();
             if(!s.cinematic_ || s.person_!=person) return false;
             int cues=0;
             while(s.cinematic_) {
@@ -205,9 +283,17 @@ public:
         s.reset(); s.target_={5,3}; s.started_=true;
         for(int i=0;i<30;++i) s.step(); if(!s.dead_) return false;
         s.reset(); s.body_={{4,4},{4,5},{3,5},{3,4},{3,3},{4,3},{5,3},{5,4}};
-        s.dir_=s.queued_=3; s.step(); if(!s.dead_) return false;
+        s.dir_=3; s.step(); if(!s.dead_ || !s.takeJam() || s.takeJam()) return false;
         s.reset(); s.body_={{4,4},{4,5},{3,5},{3,4}};
-        s.dir_=s.queued_=3; s.step(); if(s.dead_) return false;
+        s.dir_=3; s.step(); if(s.dead_) return false;
+        // Two quick presses inside one tick both land, in order.
+        s.reset(); s.key(VK_RETURN); s.key(VK_UP); s.key(VK_LEFT);
+        s.step(); if(s.dir_!=0) return false;
+        s.step(); if(s.dir_!=3) return false;
+        // Hits score points with a quick-bore bonus; best survives a reset.
+        s.reset(); s.key(VK_RETURN); for(int i=0;i<9;++i) s.step();
+        if(s.points_ <= 100 || s.best_ < s.points_ || !s.bonus_) return false;
+        { const int kept=s.best_; s.reset(); if(s.best_!=kept || s.points_!=0) return false; }
         s.preview(800); s.key('R');
         return !s.started_ && !s.cinematic_ && s.takeGroan()==-1 && s.score_==0 && s.body_.size()==4;
     }
@@ -324,7 +410,12 @@ private:
     }
     std::array<std::vector<unsigned>,3> faces_;
     static bool same(POINT a, POINT b) { return a.x==b.x && a.y==b.y; }
+    struct Drip { POINT p; int life; };
+    ULONGLONG tick() const { return std::max(65, 170 - score_ * 5); }
+    int quickBonus() const { return std::max(0, 300 - 12 * sinceSpawn_); }
+    void jamDrill() { dead_=true; jam_=true; deathAge_=0; prevBody_=body_; frac_=1; best_=std::max(best_,points_); }
     void spawn() {
+        sinceSpawn_=0;
         // Find a clear face-sized area; scan all candidates before declaring victory.
         seed_ = seed_ * 1664525u + 1013904223u;
         constexpr int count=(cols-4)*(rows-5);
@@ -339,28 +430,42 @@ private:
     }
     void step() {
         if(dead_ || won_ || cinematic_) return;
-        dir_=queued_; turned_=false;
+        if(!turns_.empty()) { dir_=turns_.front(); turns_.erase(turns_.begin()); }
+        prevBody_=body_;
+        ++sinceSpawn_;
+        for(auto& d:trail_) --d.life;
+        trail_.erase(std::remove_if(trail_.begin(),trail_.end(),[](const Drip& d){return d.life<=0;}),trail_.end());
+        if(drips_>0) { trail_.push_back({body_.back(),14}); --drips_; }
         const int dx[]={0,1,0,-1}, dy[]={-1,0,1,0};
         POINT next{body_[0].x+dx[dir_],body_[0].y+dy[dir_]};
         const bool eat=same(next,target_);
-        if(next.x<0 || next.y<0 || next.x>=cols || next.y>=rows) { dead_=true; return; }
+        if(next.x<0 || next.y<0 || next.x>=cols || next.y>=rows) { jamDrill(); return; }
         for(std::size_t i=0;i<body_.size()-(eat?0:1);++i)
-            if(same(next,body_[i])) { dead_=true; return; }
+            if(same(next,body_[i])) { jamDrill(); return; }
         body_.insert(body_.begin(),next);
         if(eat) {
             ++score_; oldTarget_=target_; impact_=2200; cinematic_=true;
+            const int quick=quickBonus();
+            bonus_=quick>0; gain_=100*score_+quick; points_+=gain_; best_=std::max(best_,points_);
+            gainAge_=0; drips_=12;
             cinemaAge_=0; sounded_=false; pendingGroan_=-1; debt_=0;
         }
         else body_.pop_back();
     }
     std::vector<POINT> body_;
     POINT target_{}, oldTarget_{};
-    int dir_=1, queued_=1, score_=0, person_=0;
+    std::vector<POINT> prevBody_;
+    std::vector<int> turns_;
+    std::vector<Drip> trail_;
+    int dir_=1, score_=0, person_=0, points_=0, best_=0, sinceSpawn_=0, gain_=0, drips_=0;
+    bool bonus_=false, jam_=false;
+    double frac_=1;
+    ULONGLONG deathAge_=0, gainAge_=99999;
     unsigned seed_=17;
     bool cinematic_=false, sounded_=false;
     int pendingGroan_=-1;
     ULONGLONG cinemaAge_=0;
-    bool started_=false, paused_=false, dead_=false, won_=false, turned_=false;
+    bool started_=false, paused_=false, dead_=false, won_=false;
     ULONGLONG clock_=0, debt_=0, impact_=0;
 };
 } // namespace anaise

@@ -2389,6 +2389,7 @@ private:
         audio_.pauseSnakeVoice(!snakeFocused || snake_.paused());
         const int groan = snake_.takeGroan();
         if (groan >= 0) audio_.snakeGroan(groan);
+        if (snake_.takeJam()) audio_.effects(4u);
         if (screen_ == Screen::Snake) audio_.play(snake_.cinematic() ? anaise::Music::None : anaise::Music::Menu);
         const bool tentacleFocused = screen_ == Screen::Tentacle && !gods_.active() &&
                                      !IsIconic(hwnd_) && GetForegroundWindow() == hwnd_;

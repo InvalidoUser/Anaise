@@ -543,6 +543,12 @@ cycle as targets. Each hit freezes the board for a 3.6-second zoom-in cinematic:
 moves in, a CC0 acted groan plays at contact, the eyes roll up and the mouth
 drools. A next-level title reveals the next portrait before play resumes.
 Levels increase the speed and keep the growing snake. Credits: `assets/snake/CREDITS.md`.
+Every hit scores 100 x level plus a quick-bore bonus that starts at 300 and drains
+with each step the target waits; the session best survives resets. Up to two
+turns buffer inside one tick, the snake slides smoothly between cells with a
+tapered tail, a drip trail follows each bore, and targets tremble as the drill
+closes in. Hitting a wall or yourself jams the drill: the board shakes, sparks
+fly and a crunch plays before the score and best are shown.
 Space/P pauses the game and cinematic voice, R resets, Enter retries after a loss. Switching away pauses;
 Space resumes after returning. Progress lasts for the open app's session.
 Offscreen: `--screen snake`, `--snake-view 1` previews a hit reaction;
