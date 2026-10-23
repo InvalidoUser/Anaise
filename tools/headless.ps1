@@ -5,11 +5,21 @@
 #
 # No window is created, so this never flashes on the desktop or steals focus.
 param(
-    [ValidateSet('splash', 'menu', 'library', 'paint', 'all')]
+    [ValidateSet('splash', 'menu', 'library', 'paint', 'browser', 'crash', 'search', 'corridor', 'gods-ritual', 'gods-arena', 'gods-tower', 'snake', 'all')]
     [string]$Screen = 'all',
     [string]$Size = '1080x740',
     [int]$TimeMs = 4200,
+    [ValidateRange(0, 10)]
+    [int]$GodsView = 0,
+    [ValidateRange(0, 1)]
+    [int]$SnakeView = 0,
     [int]$Dpi = 96,
+    [ValidateRange(0, 4)]
+    [int]$SchoolView = 0,
+    [ValidateRange(1, 4)]
+    [int]$SchoolGirl = 1,
+    [ValidateSet('neutral', 'happy', 'shy', 'hurt', 'afraid', 'dead')]
+    [string]$SchoolExpression = 'neutral',
     [string]$OutDir = 'build\headless',
     [switch]$Build
 )
@@ -25,8 +35,9 @@ if ($Build -or -not (Test-Path $exe)) {
 
 $process = Start-Process -FilePath $exe `
     -ArgumentList @('--headless', '--screen', $Screen, '--size', $Size,
-                    '--time', $TimeMs, '--dpi', $Dpi, '--out', "`"$OutDir`"") `
-    -WorkingDirectory $root -Wait -PassThru
+                    '--time', $TimeMs, '--gods-view', $GodsView, '--snake-view', $SnakeView, '--dpi', $Dpi, '--school-view', $SchoolView,
+                    '--school-girl', $SchoolGirl, '--school-expression', $SchoolExpression, '--out', "`"$OutDir`"") `
+    -WorkingDirectory $root -WindowStyle Hidden -Wait -PassThru
 if ($process.ExitCode -ne 0) {
     throw "headless render failed (exit $($process.ExitCode))"
 }

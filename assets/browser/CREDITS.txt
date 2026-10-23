@@ -1,0 +1,63 @@
+Old Hall — Sergej Majboroda / Poly Haven
+Asset: https://polyhaven.com/a/old_hall
+License: CC0 1.0 Universal
+License source: https://polyhaven.com/license
+CC0 deed: https://creativecommons.org/publicdomain/zero/1.0/
+Retrieved: 2026-10-23
+Original: https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/old_hall.jpg
+
+old_hall.bmp is a cropped, resized, contrast-adjusted, monochrome dithered
+derivative of the actual tonemapped HDRI, not the site's example renders.
+Embedded in Anaise; no runtime network access or asset download.
+The occupant silhouette, archive text and browser effects are original code.
+
+Abandoned Church — Sergej Majboroda / Poly Haven
+Asset: https://polyhaven.com/a/abandoned_church
+License: CC0 1.0 Universal (same license and deed above)
+Original: https://dl.polyhaven.org/file/ph-assets/HDRIs/extra/Tonemapped%20JPG/abandoned_church.jpg
+Retrieved: 2026-10-23
+abandoned_church.bmp uses the same crop, resize, contrast and monochrome
+dither treatment. Neither derivative carries the source metadata.
+
+Witness portrait — rottonara
+Title: Portrait-Person-Old-Man-Man-Head-1615262.jpg
+Source/license record:
+https://commons.wikimedia.org/wiki/File:Portrait-Person-Old-Man-Man-Head-1615262.jpg
+Original image:
+https://upload.wikimedia.org/wikipedia/commons/3/35/Portrait-Person-Old-Man-Man-Head-1615262.jpg
+License: CC0 1.0 Universal (deed above).
+The Commons record documents the original Pixabay CC0 release, reviewed
+on 2018-08-07. This is the historical CC0 release, not the current Pixabay
+Content License. Retrieved 2026-10-23.
+witness.bmp: crop (1000,180)-(3860,3264), resize 256x320, monochrome,
+contrast 1.6, brightness 0.75, dark edge vignette and 1-bit dithering.
+The fictional browser's visitor is a character using this stock portrait;
+the text makes no claims about the actual subject. Source metadata removed.
+
+Witness with glasses — Anonymous User / PublicDomainPictures.net
+Title: Man's Face
+Source/license: https://www.publicdomainpictures.net/en/view-image.php?image=177628&picture=mans-face
+Original: https://www.publicdomainpictures.net/pictures/180000/velka/visage-dhomme-.jpg
+License: CC0 1.0 Universal; source explicitly identifies the image as CC0.
+witness_glasses.bmp: crop (900,320)-(1510,1130), resize 256x320,
+contrast 1.6, brightness 0.65, dark edge vignette, 1-bit dithering.
+
+Puppet witness — Martin Vorel / LibreShot
+Title: Ceepy Clown
+Source/license: https://libreshot.com/ceepy-clown/
+Original: https://libreshot.com/wp-content/uploads/2017/03/scary-clown.jpg
+License: CC0 1.0 Universal, linked explicitly on the source page.
+witness_puppet.bmp: crop (1080,240)-(2580,2115), resize 256x320,
+contrast 1.7, brightness 0.78, dark edge vignette, 1-bit dithering.
+
+Painted witness — Hugo van der Goes / Metropolitan Museum of Art
+Title: Portrait of a Man (MET 2010.118, DP234678)
+Museum: https://www.metmuseum.org/art/collection/search/440840
+Source/license: https://commons.wikimedia.org/wiki/File:Portrait_of_a_Man_MET_DP234678.jpg
+Original: https://upload.wikimedia.org/wikipedia/commons/e/e1/Portrait_of_a_Man_MET_DP234678.jpg
+License: CC0 1.0 Universal, Metropolitan Museum of Art Open Access.
+witness_portrait.bmp: crop (760,650)-(2520,3000), resize 256x320,
+contrast 1.55, brightness 1.0, dark edge vignette, 1-bit dithering.
+
+All four source/license records checked on 2026-10-23. Derivatives are embedded
+in the executable with source metadata removed. No runtime network access.

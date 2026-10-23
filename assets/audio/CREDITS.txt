@@ -31,3 +31,83 @@ and written as 16-bit PCM WAV. The WAVs are embedded in Anaise.exe as RCDATA
 (resources 201, 202 and 203) so the executable stays self-contained.
 
 Licence: CC0 1.0 Universal, https://creativecommons.org/publicdomain/zero/1.0/
+
+The New Gods
+------------
+hymn.wav  "Original hymn" (16-bit original version) by Bobjt
+          https://opengameart.org/content/original-hymn
+          Source: https://opengameart.org/sites/default/files/2-hymn_16-bit-original_0.mp3
+          Source page explicitly lists CC0. Verified 2026-10-23.
+          39-second mono 22050 Hz PCM loop; a one-second tail/head crossfade.
+          Rebuild with tools/prepare_gods_audio.py (development tools only).
+          Resource 204. At runtime: eight-second fade-in, playback rate rising
+          from 0.22x to 1.05x over sixteen seconds, soft distortion and echoes.
+          This is an instrumental hymn, not a sampled vocal choir.
+
+CC0 sound effects (verified 2026-10-23)
+-------------------------------------
+Kenney: https://kenney.nl/assets/rpg-audio
+        https://kenney.nl/assets/impact-sounds
+Both the official pages and the included License.txt files specify CC0.
+Original license files are preserved as kenney-rpg-CC0.txt and
+kenney-impact-CC0.txt in this directory.
+
+211 gods-spark.wav      RPG Audio / metalClick.ogg
+212 gods-slash.wav      RPG Audio / knifeSlice.ogg, 0.8x speed
+213 gods-hit.wav        Impact Sounds / impactMetal_medium_000.ogg, 0.8x
+214 gods-parry.wav      Impact Sounds / impactMetal_heavy_000.ogg
+216 gods-judgement.wav  Impact Sounds / impactBell_heavy_000.ogg, 0.45x
+
+215 gods-reveal.wav     "Ambient horror" by techiew
+                       https://opengameart.org/content/ambient-horror
+                       https://opengameart.org/sites/default/files/ambient_horror.wav
+                       Source page explicitly lists CC0. First six seconds
+                       after slowing to 0.65x, with half-second envelope fades.
+
+All SFX: mono 22050 Hz PCM, normalized to 0.7 peak, short edge fades.
+Rebuild with tools/prepare_gods_sfx.py (development dependencies only).
+Runtime: eight overlapping voices; all music and effects obey the same M mute.
+
+After School college music and screams (verified 2026-10-23)
+---------------------------------------------------------
+205 school.wav: Cate by Cakeflaps / You're Perfect Studio.
+Source and license: https://opengameart.org/content/cate
+The author offers CC0 alongside CC-BY and OGA-BY; this project selects CC0.
+Download: https://opengameart.org/sites/default/files/Cakeflaps%20-%20Cate.wav
+Full 106.67-second composition, mono 22050 Hz PCM, peak normalized to 0.65,
+10ms edge fades. Normal playback is the original musical arrangement; the
+horror state slows and detunes the same CC0 track at runtime. This is not
+Doki Doki Literature Club's music or a recreation of its melody.
+
+217 school-scream-1.wav: Female scream 02 by missozzy, CC0.
+Source and license: https://freesound.org/people/missozzy/sounds/169811/
+Public high-quality audio preview used:
+https://cdn.freesound.org/previews/169/169811_1122547-hq.mp3
+Duration: 1.970 seconds.
+
+218 school-scream-2.wav: Female scream 01 by missozzy, CC0.
+Source and license: https://freesound.org/people/missozzy/sounds/169810/
+Public high-quality audio preview used:
+https://cdn.freesound.org/previews/169/169810_1122547-hq.mp3
+Duration: 7.069 seconds. Both descriptions identify these as a friend's acted
+screaming, not recordings of actual injury. Used as fictional game voices.
+
+Both screams: mono 22050 Hz PCM, peak normalized to 0.8 with 100-sample fades.
+CC0 deed: https://creativecommons.org/publicdomain/zero/1.0/
+Rebuild: tools/prepare_school_audio.py (development-only soundfile/numpy/scipy).
+Music, screams and existing effects share the worker mixer and M mute ramp.
+
+Snake drill cinematics (verified 2026-10-23)
+------------------------------------------
+219-221 snake-groan-1.wav / snake-groan-2.wav / snake-groan-3.wav
+"grunts of male death and pain" by thebardofblasphemy, CC0.
+Source and licence: https://opengameart.org/content/grunts-male-death-and-pain
+Download: https://opengameart.org/sites/default/files/death%20pain%20grunts.wav
+CC0 deed: https://creativecommons.org/publicdomain/zero/1.0/
+The author describes recordings of his own voice acting injured or dying.
+Source SHA256: 3f00fba827f20ff9ccea1bc07d2c21ab8d3a36e81b48a6005cf8459f02779586
+Selections: 0.40-1.95s, 3.85-6.20s, 10.00-12.20s (original speed).
+Mono 22050 Hz PCM16, normalized to 0.75 peak with 10ms edge fades.
+Rebuild: tools/prepare_snake_audio.py (development-only numpy/soundfile/scipy).
+Each cinematic queues one voice at drill contact, 500ms after the zoom starts.
+Voices share the M mute ramp and pause with the cinematic on focus loss.

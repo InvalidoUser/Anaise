@@ -6,11 +6,44 @@
 /* Title typeface: Squealer, CC0 1.0 (assets/fonts) */
 102 RCDATA "assets/fonts/squealer.otf"
 
+/* Desktop dedication typeface: UnifrakturMaguntia, SIL OFL 1.1 (assets/fonts) */
+103 RCDATA "assets/fonts/unifrakturmaguntia.ttf"
+
 /* Music: three CC0 ambient tracks (assets/audio/CREDITS.txt).
    201 intro, 202 menu, 203 room. The app streams them through waveOut. */
 201 RCDATA "assets/audio/intro.wav"
 202 RCDATA "assets/audio/menu.wav"
 203 RCDATA "assets/audio/room.wav"
+/* Original hymn by Bobjt, CC0; pitch/distortion applied at playback. */
+204 RCDATA "assets/audio/hymn.wav"
+/* Cate by Cakeflaps / You're Perfect Studio, offered under CC0. */
+205 RCDATA "assets/audio/school.wav"
+/* CC0 Kenney + techiew SFX; provenance in assets/audio/CREDITS.txt. */
+211 RCDATA "assets/audio/gods-spark.wav"
+212 RCDATA "assets/audio/gods-slash.wav"
+213 RCDATA "assets/audio/gods-hit.wav"
+214 RCDATA "assets/audio/gods-parry.wav"
+215 RCDATA "assets/audio/gods-reveal.wav"
+216 RCDATA "assets/audio/gods-judgement.wav"
+/* Acted female screams 01/02 by missozzy, CC0, Freesound. */
+217 RCDATA "assets/audio/school-scream-1.wav"
+218 RCDATA "assets/audio/school-scream-2.wav"
+
+/* Old Hall, Sergej Majboroda / Poly Haven, CC0; dithered offline. */
+301 BITMAP "assets/browser/old_hall.bmp"
+302 BITMAP "assets/browser/abandoned_church.bmp"
+/* CC0 portrait by rottonara; see assets/browser/CREDITS.txt. */
+303 BITMAP "assets/browser/witness.bmp"
+304 BITMAP "assets/browser/witness_glasses.bmp"
+305 BITMAP "assets/browser/witness_puppet.bmp"
+306 BITMAP "assets/browser/witness_portrait.bmp"
+
+/* Entirely fictional adult cast: neutral/happy/shy/hurt/afraid/dead.
+   Built-in imagegen masters and prompts: assets/school/CREDITS.md. */
+401 BITMAP "assets/school/hana-faces.bmp"
+402 BITMAP "assets/school/rei-faces.bmp"
+403 BITMAP "assets/school/yumi-faces.bmp"
+404 BITMAP "assets/school/mika-faces.bmp"
 
 /* The application manifest is left to the linker's default: MinGW's ld always
    embeds one and cannot merge another, and the app sets per-monitor DPI
@@ -43,3 +76,13 @@ BEGIN
         VALUE "Translation", 0x409, 1200
     END
 END
+
+// CC0 Open Access portrait crops for Snake.
+501 BITMAP "assets/snake/436532-face.bmp"
+502 BITMAP "assets/snake/436323-face.bmp"
+503 BITMAP "assets/snake/437397-face.bmp"
+
+// Acted human CC0 grunts; source and edits in assets/audio/CREDITS.txt.
+219 RCDATA "assets/audio/snake-groan-1.wav"
+220 RCDATA "assets/audio/snake-groan-2.wav"
+221 RCDATA "assets/audio/snake-groan-3.wav"

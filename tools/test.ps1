@@ -93,7 +93,7 @@ function Check {
 function Invoke-Render {
     param([string[]]$Arguments)
     $process = Start-Process -FilePath $exe -ArgumentList $Arguments `
-        -WorkingDirectory $root -Wait -PassThru
+        -WorkingDirectory $root -WindowStyle Hidden -Wait -PassThru
     return $process.ExitCode
 }
 
@@ -104,7 +104,7 @@ function Render-Screens {
 }
 
 $expectedWidth, $expectedHeight = $Size -split 'x' | ForEach-Object { [int]$_ }
-$screenNames = @('splash', 'menu', 'library', 'paint', 'browser')
+$screenNames = @('splash', 'menu', 'library', 'paint', 'browser', 'snake', 'gods-ritual', 'gods-arena', 'gods-tower')
 
 if (-not $NoBuild) {
     & cmd /c (Join-Path $root 'build.bat')
@@ -150,6 +150,36 @@ foreach ($name in $screenNames) {
             ([AnaiseShot]::Sha256($a) -eq [AnaiseShot]::Sha256($b))
     }
 }
+
+$exitCode = Invoke-Render @('--headless', '--screen', 'snake', '--snake-view', '1', '--time', '800', '--out', 'build\test\snake-hit')
+Check 'Snake hit reaction renders' ($exitCode -eq 0)
+$hitPath = Join-Path $root 'build\test\snake-hit\snake.png'
+$hitProbe = [AnaiseShot]::Inspect($hitPath)
+Check 'Snake reaction stays binary' ($hitProbe.Grey -eq 0 -and $hitProbe.Colour -eq 0)
+Check 'Snake hit differs from ready board' ([AnaiseShot]::Sha256($hitPath) -ne [AnaiseShot]::Sha256((Join-Path $root "$first\snake.png")))
+$exitCode = Invoke-Render @('--headless', '--screen', 'snake', '--snake-view', '1', '--time', '100', '--out', 'build\test\snake-roll')
+Check 'Snake eye-roll starts rendering' ($exitCode -eq 0)
+Check 'Snake eye-roll and drool animate' ([AnaiseShot]::Sha256($hitPath) -ne [AnaiseShot]::Sha256((Join-Path $root 'build\test\snake-roll\snake.png')))
+$exitCode = Invoke-Render @('--headless', '--screen', 'snake', '--snake-view', '2')
+Check 'invalid Snake preview rejected' ($exitCode -ne 0)
+
+foreach ($age in @(1800, 3200, 4000)) {
+    $out = "build\test\snake-cinema-$age"
+    $exitCode = Invoke-Render @('--headless', '--screen', 'snake', '--snake-view', '1', '--time', $age, '--out', $out)
+    Check "Snake cinematic stage $age renders" ($exitCode -eq 0)
+    $path = Join-Path $root "$out\snake.png"
+    $probe = [AnaiseShot]::Inspect($path)
+    Check "Snake cinematic stage $age stays binary" ($probe.Grey -eq 0 -and $probe.Colour -eq 0 -and $probe.White -gt 1000)
+    Check "Snake cinematic stage $age advances" ([AnaiseShot]::Sha256($path) -ne [AnaiseShot]::Sha256($hitPath))
+}
+$repeatOut = 'build\test\snake-cinema-repeat'
+$exitCode = Invoke-Render @('--headless', '--screen', 'snake', '--snake-view', '1', '--time', '800', '--out', $repeatOut)
+Check 'Snake cinematic is deterministic' ($exitCode -eq 0 -and [AnaiseShot]::Sha256($hitPath) -eq [AnaiseShot]::Sha256((Join-Path $root "$repeatOut\snake.png")))
+
+$exitCode = Invoke-Render @('--headless', '--check-snake')
+Check 'Snake scoring, collisions, cinematic freeze, voice timing, next-person progression and desktop routing' ($exitCode -eq 0)
+$snakeProbe = [AnaiseShot]::Inspect((Join-Path $root "$first\snake.png"))
+Check 'Snake palette is strictly binary' ($snakeProbe.Grey -eq 0 -and $snakeProbe.Colour -eq 0)
 
 # The seraphim starts blank and is fully drawn and titled five seconds in.
 $early = 'build\test\splash-early'
@@ -208,12 +238,129 @@ if (Test-Path $pagePath) {
 $exitCode = Invoke-Render @('--headless', '--screen', 'browser', '--page', '16')
 Check 'invalid browser page rejected' ($exitCode -ne 0) "exit $exitCode"
 
+# Browser behavior is exercised through the same handlers used by live input.
+$exitCode = Invoke-Render @('--headless', '--check-browser')
+Check 'browser navigation, search, bookmarks, all six CC0 bitmaps and deterministic moving lens work' ($exitCode -eq 0) "exit $exitCode"
+foreach ($view in @('archive', 'directory', 'history', 'bookmarks')) {
+    $viewOut = "build\test\browser-$view"
+    $viewArgs = @('--headless', '--screen', 'browser', '--size', $Size,
+                  '--time', '4200', '--out', "`"$viewOut`"")
+    if ($view -eq 'archive') { $viewArgs += @('--browser-scroll', '320') }
+    else { $viewArgs += @('--browser-panel', $view) }
+    $exitCode = Invoke-Render $viewArgs
+    Check "browser $view renders" ($exitCode -eq 0) "exit $exitCode"
+    $viewPath = Join-Path $root "$viewOut\browser.png"
+    if (Test-Path $viewPath) {
+        $viewProbe = [AnaiseShot]::Inspect($viewPath)
+        Check "browser $view is greyscale with content" ($viewProbe.Colour -eq 0 -and $viewProbe.White -gt 1000)
+    } else { Check "browser $view written" $false }
+}
+$exitCode = Invoke-Render @('--headless', '--browser-scroll', '321')
+Check 'invalid browser scroll rejected' ($exitCode -ne 0) "exit $exitCode"
+$exitCode = Invoke-Render @('--headless', '--browser-panel', 'nonsense')
+Check 'invalid browser panel rejected' ($exitCode -ne 0) "exit $exitCode"
+
 # The three tracks are embedded in the executable and must parse as mono
 # 22.05 kHz PCM even though no audio device is touched in a headless run.
 $exitCode = Invoke-Render @('--headless', '--check-audio')
 Check 'embedded music parses' ($exitCode -eq 0) "exit $exitCode"
 
+$exitCode = Invoke-Render @('--headless', '--check-gods')
+Check 'New Gods rolling trigger, combat, collision, pause, retries, companion oaths, seals, floors and both endings' ($exitCode -eq 0) "exit $exitCode"
+foreach ($name in @('gods-ritual', 'gods-arena', 'gods-tower')) {
+    $probe = [AnaiseShot]::Inspect((Join-Path $root "$first\$name.png"))
+    Check "$name is pure black and white" ($probe.Grey -eq 0 -and $probe.Colour -eq 0)
+}
+# Every important state uses the same renderer as the live game.
+foreach ($view in 1..10) {
+    $target = "build\test\gods-$view"
+    $exitCode = Invoke-Render @('--headless', '--screen', 'gods-arena', '--gods-view', $view,
+        '--time', '1200', '--out', "`"$target`"")
+    Check "New Gods scene $view renders" ($exitCode -eq 0)
+    $path = Join-Path $root "$target\gods-arena.png"
+    if (Test-Path $path) {
+        $probe = [AnaiseShot]::Inspect($path)
+        Check "New Gods scene $view has binary content" ($probe.White -gt 1000 -and $probe.Grey -eq 0 -and $probe.Colour -eq 0)
+    } else { Check "New Gods scene $view written" $false }
+}
+# Caption entrance, oversized impact and settled hold must be different frames.
+$captionHashes = @()
+foreach ($time in @(3500,3600,3700,4200)) {
+    $target="build\test\gods-caption-$time"
+    $exitCode=Invoke-Render @('--headless','--screen','gods-ritual','--time',$time,'--out',"`"$target`"")
+    Check "dramatic reveal at $time ms renders" ($exitCode -eq 0)
+    $captionHashes += [AnaiseShot]::Sha256((Join-Path $root "$target\gods-ritual.png"))
+}
+Check 'reveal changes through caption impact and settle' (@($captionHashes | Select-Object -Unique).Count -eq 4)
+$exitCode=Invoke-Render @('--headless','--gods-view','11')
+Check 'invalid New Gods scene rejected' ($exitCode -ne 0)
+
 # In-process, offscreen input regression: no native window is created.
+$exitCode = Invoke-Render @('--headless', '--check-game')
+Check '2D puzzles lead to school; all girls reachable; movement, dialogue, hearts, rejection, dates and restart work' ($exitCode -eq 0) "exit $exitCode"
+foreach ($view in 0..4) {
+    $schoolOut = "build\test\school-$view"
+    $schoolRepeat = "build\test\school-$view-repeat"
+    foreach ($target in @($schoolOut, $schoolRepeat)) {
+        $exitCode = Invoke-Render @('--headless', '--screen', 'corridor', '--school-view', $view,
+            '--size', $Size, '--time', '4200', '--out', "`"$target`"")
+        Check "school view $view renders to $target" ($exitCode -eq 0)
+    }
+    $schoolPath = Join-Path $root "$schoolOut\corridor.png"
+    if (Test-Path $schoolPath) {
+        $probe = [AnaiseShot]::Inspect($schoolPath)
+        Check "school view $view stays pure black and white" ($probe.Grey -eq 0 -and $probe.Colour -eq 0)
+        Check "school view $view has content" ($probe.White -gt 1000)
+        $repeatPath = Join-Path $root "$schoolRepeat\corridor.png"
+        Check "school view $view is deterministic" ((Test-Path $repeatPath) -and
+            [AnaiseShot]::Sha256($schoolPath) -eq [AnaiseShot]::Sha256($repeatPath))
+    } else { Check "school view $view written" $false }
+}
+$exitCode = Invoke-Render @('--headless', '--school-view', '5')
+Check 'invalid school view rejected' ($exitCode -ne 0)
+
+# All four identities and expressions must make it through the actual renderer.
+# --check-game additionally checks all 24 atlas cells, reactions and horror AI.
+$portraitHashes = @()
+$expressions = @('happy', 'shy', 'hurt', 'neutral')
+foreach ($girl in 1..4) {
+    $expression = $expressions[$girl - 1]
+    $portraitOut = "build\test\portrait-$girl-$expression"
+    $exitCode = Invoke-Render @('--headless', '--screen', 'corridor', '--school-view', '1',
+        '--school-girl', $girl, '--school-expression', $expression,
+        '--size', $Size, '--time', '4200', '--out', "`"$portraitOut`"")
+    Check "girl $girl $expression portrait renders" ($exitCode -eq 0)
+    $portraitPath = Join-Path $root "$portraitOut\corridor.png"
+    if (Test-Path $portraitPath) {
+        $probe = [AnaiseShot]::Inspect($portraitPath)
+        Check "girl $girl portrait is binary with content" ($probe.Grey -eq 0 -and $probe.Colour -eq 0 -and $probe.White -gt 1000)
+        $portraitHashes += [AnaiseShot]::Sha256($portraitPath)
+    } else { Check "girl $girl portrait written" $false }
+}
+Check 'all four rendered portraits differ' (@($portraitHashes | Select-Object -Unique).Count -eq 4)
+if ($portraitHashes.Count -eq 4) {
+    $neutralPath = Join-Path $root 'build\test\school-1\corridor.png'
+    Check 'happy expression changes Hana render' ($portraitHashes[0] -ne [AnaiseShot]::Sha256($neutralPath))
+}
+$exitCode = Invoke-Render @('--headless', '--school-girl', '5')
+Check 'invalid school girl rejected' ($exitCode -ne 0)
+$exitCode = Invoke-Render @('--headless', '--school-expression', 'nonsense')
+Check 'invalid school expression rejected' ($exitCode -ne 0)
+
+# The additional horror expressions render without literal emotion labels.
+foreach ($expression in @('afraid', 'dead')) {
+    $target = "build\test\school-expression-$expression"
+    $exitCode = Invoke-Render @('--headless', '--screen', 'corridor', '--school-view', '1',
+        '--school-girl', '4', '--school-expression', $expression, '--size', $Size,
+        '--time', '4200', '--out', "`"$target`"")
+    Check "$expression fictional face renders" ($exitCode -eq 0)
+    $path = Join-Path $root "$target\corridor.png"
+    if (Test-Path $path) {
+        $probe = [AnaiseShot]::Inspect($path)
+        Check "$expression face stays binary" ($probe.Grey -eq 0 -and $probe.Colour -eq 0)
+    } else { Check "$expression face written" $false }
+}
+
 $exitCode = Invoke-Render @('--headless', '--check-windows')
 Check 'desktop icons move without launching; app windows and content input work' ($exitCode -eq 0) "exit $exitCode"
 

@@ -2,11 +2,53 @@
 
 A small black-and-white game library in a native Windows window. Anaise opens
 on a dot-art seraphim startup screen, then a monochrome computer desktop with
-three apps to open: Bethelament, a Painter canvas and Veil, a browser that only
-reaches dead cult pages.
+four apps to open: Bethelament, a Painter canvas, Veil (a browser that only
+reaches dead cult pages), and Snake.
 
 The palette is strictly black and white, the logo is 10x10 pixel art, and
 nothing is written to disk.
+
+## The New Gods
+
+Click **The New Gods** on the exposed desktop. Each click sheds particles;
+15 clicks within any rolling 10 seconds rupture the title and summon Cthulhu.
+The cinematic holds in silence visually, then **THE GODS WILL KNEEL.** slams
+into view. A CC0 instrumental hymn fades in over eight seconds while its pitch
+rises from 0.22x to 1.05x over sixteen seconds, with distortion and echoes.
+CC0 clicks, swishes, metal hits, parries, horror ambience and a deep bell punctuate
+the sequence. Music and effects both obey `M` mute.
+
+The native software 3D arena contains three successive sword duels: Ares,
+Athena and Zeus. Read their wind-ups, face incoming blows to guard, time a fresh
+guard to parry, and punish recovery. Zeus marks the ground before lightning.
+The giant witness watches from the north, his pupils following your position.
+Victory grants entry to **The Unwritten Tower**, an original four-floor story
+chapter: recruit fellow climbers, remember the seal order, defeat the Hollow
+Warden and choose the cost of ascent. Companions are local story characters,
+not online players. Both endings conclude this chapter; there is no server,
+account, persistence or runtime download.
+
+| Control | Action |
+| --- | --- |
+| W/S, up/down | Move forward/backward |
+| A/D | Strafe |
+| Left/right arrows | Turn |
+| J, Space, left click | Sword attack |
+| K, right mouse held | Guard; fresh guard can parry |
+| Shift | Dodge backward; costs resolve |
+| E, Enter | Speak, invoke a seal, open a gate |
+| 1/2 | Dialogue and story choices |
+| R | Retry a defeated encounter |
+| Esc | Pause; Enter/Esc resumes, Q returns to desktop |
+| M | Mute all music and effects |
+
+Offscreen captures: `--screen gods-ritual`, `gods-arena`, `gods-tower`.
+`--gods-view 1..10` captures rupture, Athena, Zeus, admission, memory trial,
+Warden, final choice, ending, defeat and dialogue respectively. `--time` freezes
+the animation in milliseconds; the reveal caption impacts at 3600 ms.
+`--headless --check-gods` checks the actual game logic and desktop input routing.
+Research and original design decisions: [docs/NEW_GODS.md](docs/NEW_GODS.md).
+Audio provenance: [assets/audio/CREDITS.txt](assets/audio/CREDITS.txt).
 
 ## Screenshots
 
@@ -146,8 +188,7 @@ Braille dot into a point of light.
 - Pure black (`#000000`) and white (`#FFFFFF`) throughout
 - Seraphim startup screen drawn as a field of dots, revealed outward from the
   centre, then the title sputters on like a failing tube
-- An OS-style main menu: a dithered monitor case with screws, vents and a
-  breathing power lamp around a desktop of app icons
+- An OS-style desktop with a slim monitor outline and clear monochrome app icons
 - Independent draggable app windows with minimize, maximize/restore and close,
   plus a taskbar tab for each open app. The desktop starts with no apps open
 - A CC0 ambient score: an intro choir under the seraphim, a dark shrine loop on
@@ -159,12 +200,19 @@ Braille dot into a point of light.
   the wallpaper behind the icons.
 - **Bethelament**: a quiet room of shelves and bookcases, with a small hooded
   pilgrim you walk around it using WASD or the arrow keys
+- **After School**: finish the four 2D puzzle rooms and follow the crash/search
+  transition into a first-person school dating sim. Explore a 31 x 25 campus
+  with classrooms, lockers, windows, and four club girls with different interests.
+  Dialogue choices build individual hearts and a shared rizz score; earn at
+  least three hearts and invite someone to the festival for her ending
 - **Painter**: a 32x32 monochrome canvas with brush sizes (1-3 or the mouse
   wheel), erasing, undo and redo, and clear
 - **Veil**: a dial-up browser of fifteen dead pages, with tabs, back, forward,
   reload and a link to follow. It never touches the network
 - 10x10 pixel-art bookshelf logo, used both in the window and as the app icon
-- Titles set in Squealer, a CC0 blackletter typeface embedded in the executable
+- Titles set in Squealer, a CC0 blackletter typeface embedded in the executable,
+  and the desktop dedication set in UnifrakturMaguntia, a SIL OFL blackletter
+  face embedded beside it
 - Native resizable window, dark title bar, minimise/maximise, snap layouts,
   taskbar icon
 - `F11` or `Alt+Enter` true fullscreen, `Esc` to leave it
@@ -223,8 +271,11 @@ closing an in-game window leaves the machine running. `Esc` minimizes the
 focused app, and clicking the desktop returns focus to it. The Quit icon or
 the native close button exits.
 
-The desktop has no top menu bar or border lettering. The small logo button
-opens the app menu, which lists the three apps and Quit. The clock and
+The desktop has no top menu bar or border lettering, apart from the dedication:
+`The New Gods` sits at the top right in a blackletter face, and every wallpaper
+ring and scanline that passes under it comes out inverted, so the type is cut
+out of the moving background rather than drawn on top of it. The small logo
+button opens the app menu, which lists the three apps and Quit. The clock and
 clickable volume icon sit at the bottom right; click the speaker or press `M`
 to mute. Painter has a staggered, etched Hebrew wallpaper spelling "dissolve
 and solidify" around its black canvas. Keyboard instructions are kept out of
@@ -273,6 +324,62 @@ and settles to a faint shimmer at rest. Sampling keeps a pixel-sized footprint, 
 the room's one-pixel rug and shelf lines bend instead of breaking into dashes,
 and the output is still nothing but black and white.
 
+## After School (3D)
+
+The school follows Bethelament's key, lever, and ordered-plate puzzles and the
+final breach. Enter or click through the crash/search sequence, or let it play
+automatically. The college has eight classrooms and four club rooms connected by
+wide halls. Its map shows the campus and your facing direction.
+
+Meet Hana in the northwest art studio, Rei in the northeast gym, Yumi in the
+southwest library, and Mika in the southeast music room. Each has three
+conversations and a distinct sprite, personality, and festival ending. Thoughtful
+answers earn two hearts and ten rizz; ordinary answers earn one heart and three
+rizz; rude answers lose one heart and five rizz. Hearts stay between zero and
+five, and rizz stays between zero and 100. After three conversations you can
+invite her to the festival with three hearts, talk more, or leave.
+
+Use `W/S` or Up/Down to walk, `A/D` or Left/Right to turn, `E` to talk, and
+`1`-`3` to choose an answer. `Backspace` leaves a conversation. `R` restarts the
+school; `Esc` minimizes it and preserves progress. On a festival ending,
+`Enter` returns to the 2D rooms. Everything lasts for the current session.
+
+All four characters are entirely fictional adults aged 25-27, with photorealistic
+generated faces in the world and conversation panels. Six expressions cover
+neutral, happy, shy, hurt, terrified and dead states. Names appear alone; there
+are no visible emotion labels. The former real-person stock-photo cast has been
+replaced. [Character designs and generation prompts](assets/school/CREDITS.md)
+are included with the color masters in `assets/school/masters`.
+
+A hidden knife can be found in the north classroom. Search near it with `E`,
+then use `Q` to equip or put it away. `F` or a left click attacks within reach
+and in front of you; walls block hits. Three hits are fatal. Exposing the knife
+frightens nearby witnesses; attacks trigger screams, fleeing, face changes,
+blood bursts, floor pools and blade stains. Wounded characters run more slowly;
+survivors find routes through doorways to the hall exits. Hold `Shift` to sprint.
+`R` starts a fresh college day, restoring everyone and clearing the knife/blood.
+Blood effects use the existing pure black-and-white palette.
+
+The college plays **Cate** by Cakeflaps / You're Perfect Studio, selected under
+its CC0 license. During panic the same tune slows and drifts out of tune. Two
+acted female screams by **missozzy** are also CC0. Source pages, download URLs,
+processing and resource IDs are recorded in `assets/audio/CREDITS.txt`. All
+music and screams are embedded and obey `M` mute; there is no runtime network.
+
+Preview without opening a window:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\headless.ps1 -Screen corridor -SchoolView 1
+```
+
+`-SchoolView 0` shows exploration, `1` a conversation, `2` a festival
+ending, `3` an equipped knife and frightened character, and `4` the aftermath.
+The equivalent executable flag is `--school-view 0|1|2|3|4` with
+`--headless --screen corridor`. `--check-game` checks the full 2D-to-3D flow,
+room reachability, collision, dialogue, hearts, invitations, and restart.
+Add `-SchoolGirl 1..4 -SchoolExpression neutral|happy|shy|hurt|afraid|dead` to preview any
+girl and expression, or use `--school-girl` and `--school-expression` directly.
+
 ## Painter
 
 Painter is a 32 x 32 monochrome canvas. The number keys `1`-`3` and the mouse
@@ -289,15 +396,46 @@ are stored in the executable, so every page is local and no socket is ever
 opened: a welcome page, a shrine, an order, a guestbook that should not exist,
 and the rest of the crawl.
 
-The chrome is a tab strip, back and forward arrows, a reload plate, an address
-bar and one link per page. `Left`/`A` (or `Backspace`) goes back a page, while
-`Right`/`D` follows the current page's link, as do `Enter`, `Space`, `Tab` and
-the link plate. The mouse wheel steps through the crawl. `1`-`9` and `0` open
-the first ten tabs, `Home` and `End` go to the first and last page, `R`
-reloads, and `Esc` minimizes the browser.
-Every page spends a moment contacting its host behind a dithered progress bar
+Up to six independent tabs retain their own navigation history and scroll
+position. Click `+` or press `Ctrl+T` to open a tab; click its `x` or press
+`Ctrl+W` to close it. `Ctrl+Tab` switches tabs. The arrows traverse actual
+visited pages (`Left`/`Backspace` and `Right`); following a new link after
+going back replaces that tab's forward history.
+
+Click the address field or press `Ctrl+L`, then type a local address or search
+the directory by title or host. `Ctrl+A` selects the field, `Ctrl+V` pastes,
+`Backspace` edits and `Enter` navigates. Unknown addresses show an empty
+search result. The directory lists all fifteen hosts. `Ctrl+H` opens history;
+`Ctrl+B` opens bookmarks; `Ctrl+D` or the plate beside the address toggles a
+bookmark. Panels support wheel scrolling and clickable records.
+
+The wheel, arrow keys, `Page Up`/`Page Down`, `Space`, `Home` and `End` scroll
+the document. `Enter` follows its link; `F5` or `Ctrl+R` reloads. `Esc` cancels
+address editing or closes a browser panel, then minimizes the browser.
+All tabs, bookmarks and history last only for this session.
+
+Scrolling below a site's original page reveals photographs of
+abandoned rooms, impossible occupants and unidentified faces. Slow presence
+events interrupt documents, and the portrait shifts with hovered controls. Its
+faces use four distinct CC0 sources: rottonara's elderly-man photograph,
+an anonymous old-man portrait from PublicDomainPictures, Martin Vorel's
+photograph of a wooden puppet, and Hugo van der Goes's portrait from The Met.
+A magnifying lens periodically glides down each image, bending the face as
+it passes, then rests before repeating. Hosts and archive scenes show different
+faces; all animation uses the same deterministic clock as headless captures.
+The archive
+uses dithered derivatives of Sergej Majboroda's CC0
+[Old Hall](https://polyhaven.com/a/old_hall) and
+[Abandoned Church](https://polyhaven.com/a/abandoned_church) assets from
+Poly Haven. Provenance and license links are in `assets/browser/CREDITS.txt`.
+Every page spends a moment loading behind a progress bar
 before it paints, and the reload plate repeats that wait. Hovering a control
 draws a hand cursor and inverts the plate.
+
+Offscreen previews also accept `--browser-scroll 0..320` and
+`--browser-panel directory|history|bookmarks`. `--check-browser` exercises
+tab isolation, history branching, address entry, search and bookmarks without
+opening a window.
 
 ## Build
 
@@ -373,18 +511,42 @@ src/audio.h        waveOut streaming for the embedded CC0 tracks
 src/ring_pattern.h the orthogonal ring pattern behind the working screens
 src/occult_art.h   dot art for the Veil pages
 src/angel_art.h    Braille seraphim source art
-src/app.rc         icon, embedded title font, music, version info
+src/app.rc         icon, embedded typefaces, music, version info
 assets/             generated 10x10 pixel-art icon
-assets/fonts/       Squealer (CC0 1.0) title typeface and its licence
+assets/fonts/       Squealer (CC0 1.0) and UnifrakturMaguntia (SIL OFL 1.1)
 assets/audio/       the three CC0 tracks as WAV, with provenance
 docs/screenshots/   losslessly compressed captures for this README
 tools/              icon generator, headless capture and test helpers
 ```
 
-## Font
+## Fonts
 
 The title uses [Squealer](https://www.dafont.com/squealer.font) by Raymond
 Larabie (Typodermic Fonts), released under
 [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). The `.otf` is
 compiled into `Anaise.exe` as a resource and registered at startup, so nothing
 has to be installed. See `assets/fonts/squealer-LICENSE.txt`.
+
+The desktop dedication uses
+[UnifrakturMaguntia](https://fonts.google.com/specimen/UnifrakturMaguntia) by
+j. 'mach' wust and Peter Wiegel, released under the
+[SIL Open Font License 1.1](https://openfontlicense.org/). Its `.ttf` is
+embedded the same way. See `assets/fonts/unifrakturmaguntia-OFL.txt`.
+
+## Snake
+
+Open SNAKE on the desktop or Start menu. Enter starts; arrows or WASD steer.
+Aim the drill head at the forehead crosshair. Every hit grows the snake, adds
+one point and increases speed; walls and your own body jam the drill.
+Three cropped historical portraits from The Met's CC0 Open Access collection
+cycle as targets. Each hit freezes the board for a 3.6-second zoom-in cinematic: the drill
+moves in, a CC0 acted groan plays at contact, the eyes roll up and the mouth
+drools. A next-level title reveals the next portrait before play resumes.
+Levels increase the speed and keep the growing snake. Credits: `assets/snake/CREDITS.md`.
+Space/P pauses the game and cinematic voice, R resets, Enter retries after a loss. Switching away pauses;
+Space resumes after returning. Progress lasts for the open app's session.
+Offscreen: `--screen snake`, `--snake-view 1` previews a hit reaction;
+`--time` sets the sequence age: 100 zooms in, 800 reacts, 3200 reveals the
+next person, and 4000 shows the next level. CC0 sound sources and edits are in
+`assets/audio/CREDITS.txt`; `tools/prepare_snake_audio.py` rebuilds the clips.
+`--headless --check-snake` checks movement, scoring, collisions and shell routing.

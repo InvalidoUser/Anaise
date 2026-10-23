@@ -1,4 +1,4 @@
-// Anaise audio -- the three CC0 ambient tracks, embedded as RCDATA.
+// Anaise audio -- five CC0 music sources and eleven effects, embedded as RCDATA.
 //
 // The tracks are mono 22.05 kHz 16-bit WAVs (see assets/audio/CREDITS.txt for
 // the sources and the loop edits). Audio is streamed through waveOut from a
@@ -24,13 +24,16 @@ enum class Music {
     Intro = 0,
     Menu = 1,
     Room = 2,
+    Hymn = 3,
+    School = 4,
+    SchoolHorror = 5,
 };
 
 class Audio {
 public:
     ~Audio() { close(); }
 
-    // Loads the three clips and opens the default wave output. Returns false
+    // Loads the clips and opens the default wave output. Returns false
     // (and stays silent) on a machine with no usable audio device.
     bool open(HINSTANCE instance) {
         if (open_) return true;
@@ -43,6 +46,10 @@ public:
             }
         }
 
+        for(int i=0;i<kEffectCount;++i){
+            effects_[i]=loadClip(instance,211+i);
+            if(effects_[i].samples.empty()){releaseTracks();return false;}
+        }
         WAVEFORMATEX format{};
         format.wFormatTag = WAVE_FORMAT_PCM;
         format.nChannels = 1;
@@ -157,23 +164,70 @@ public:
 
     bool available() const { return open_; }
 
+    // Six event bits from NewGods: spark, slash, hit, parry, reveal, judgement.
+    // The UI only queues bits; all voice state belongs to the worker thread.
+    void effects(unsigned mask) { if (open_) pendingEffects_.fetch_or(mask & 63u); }
+    void schoolScream(bool alternate) { if (open_) pendingEffects_.fetch_or(1u << (alternate ? 7 : 6)); }
+
+    void snakeGroan(int person) {
+        if (open_ && person>=0 && person<3) pendingEffects_.fetch_or(1u << (8+person));
+    }
+    void pauseSnakeVoice(bool paused) { snakeVoicePaused_.store(paused); }
+    void stopSnakeVoice() { cancelSnakeVoice_.store(true); }
+
     // Checks that the embedded clips parse, without opening a device.
     static bool resourcesPresent(HINSTANCE instance) {
         for (int id : kResourceIds) {
             Clip clip = loadClip(instance, id);
             if (clip.samples.empty()) return false;
         }
+        for (int id=211;id<=221;++id) if (loadClip(instance,id).samples.empty()) return false;
+        // Exercise the actual resampler, crescendo, effects and mute ramp
+        // without opening a playback device or writing an audio file.
+        Audio probe;
+        probe.tracks_[3]=loadClip(instance,204);
+        probe.requested_.store(3);
+        std::vector<std::int16_t> block(kBlockSamples);
+        probe.fillBuffer(block);
+        double quiet=0;for(auto sample:block)quiet+=double(sample)*sample;
+        for(int i=0;i<400;++i)probe.fillBuffer(block);
+        double loud=0;for(auto sample:block)loud+=double(sample)*sample;
+        if(loud<=quiet||probe.position_<=probe.hymnAge_*kSampleRate*.22||probe.fade_<.99)return false;
+        probe.muted_.store(true);
+        for(int i=0;i<6;++i)probe.fillBuffer(block);
+        for(auto sample:block)if(sample!=0)return false;
+        probe.muted_.store(false);probe.muteGain_=1;probe.current_=kTrackCount;
+        probe.requested_.store(static_cast<int>(Music::None));
+        probe.effects_[0]=loadClip(instance,211);probe.pendingEffects_.store(1);
+        probe.fillBuffer(block);
+        if(std::all_of(block.begin(),block.end(),[](auto sample){return sample==0;}))return false;
+        for(int i=8;i<kEffectCount;++i) {
+            for(auto& voice:probe.voices_) voice.kind=-1;
+            probe.effects_[i]=loadClip(instance,211+i);
+            probe.pendingEffects_.store(1u<<i);
+            probe.snakeVoicePaused_.store(true); probe.fillBuffer(block);
+            for(auto sample:block) if(sample!=0) return false;
+            probe.snakeVoicePaused_.store(false);
+            bool audible=false;
+            for(int j=0;j<12;++j) {
+                probe.fillBuffer(block);
+                for(auto sample:block) if(sample!=0) audible=true;
+            }
+            if(!audible) return false;
+            probe.stopSnakeVoice();probe.fillBuffer(block);
+            for(auto sample:block) if(sample!=0) return false;
+        }
         return true;
     }
 
 private:
-    static constexpr int kTrackCount = 3;
+    static constexpr int kTrackCount = 6;
+    static constexpr int kEffectCount = 11;
     static constexpr int kSampleRate = 22050;
     static constexpr int kBuffers = 4;
-    // 100 ms per buffer: short enough that a mute or a track change is felt
-    // immediately, long enough that the worker wakes only ten times a second.
-    static constexpr int kBlockSamples = kSampleRate / 10;
-    static constexpr int kResourceIds[kTrackCount] = {201, 202, 203};
+    // Four 25 ms buffers keep combat and reveal effects responsive.
+    static constexpr int kBlockSamples = kSampleRate / 40;
+    static constexpr int kResourceIds[kTrackCount] = {201, 202, 203, 204, 205, 205};
     static constexpr double kFadeSeconds = 0.45;
     static constexpr double kMuteSeconds = 0.06;
     static constexpr double kMasterGain = 0.85;
@@ -237,7 +291,7 @@ private:
         const std::size_t count = pcmBytes / sizeof(std::int16_t);
         clip.samples.resize(count);
         std::memcpy(clip.samples.data(), pcm, count * sizeof(std::int16_t));
-        // The intro is a one-shot; the other two are gapless loops.
+        // The intro is a one-shot; the remaining music clips are gapless loops.
         clip.loop = id != kResourceIds[0];
         return clip;
     }
@@ -247,6 +301,9 @@ private:
             clip.samples.clear();
             clip.samples.shrink_to_fit();
         }
+        for(auto& clip:effects_){clip.samples.clear();clip.samples.shrink_to_fit();}
+        for(auto& voice:voices_)voice=Voice{};
+        pendingEffects_.store(0);nextVoice_=0;
     }
 
     static void CALLBACK waveCallback(HWAVEOUT, UINT message, DWORD_PTR instance,
@@ -287,25 +344,37 @@ private:
     }
 
     void fillBuffer(std::vector<std::int16_t>& buffer) {
+        if(cancelSnakeVoice_.exchange(false)) {
+            for(auto& voice:voices_) if(voice.kind>=8) voice.kind=-1;
+            pendingEffects_.fetch_and(255u);
+        }
+        const unsigned pending=pendingEffects_.exchange(0);
+        for(int i=0;i<kEffectCount;++i) if(pending&(1u<<i)) {
+            Voice& voice=voices_[nextVoice_++ % 8];voice.kind=i;voice.position=0;
+        }
         const double fadeStep = 1.0 / (kFadeSeconds * kSampleRate);
         const double muteStep = 1.0 / (kMuteSeconds * kSampleRate);
         const double muteTarget = muted_.load() ? 0.0 : 1.0;
         for (std::int16_t& out : buffer) {
             const int wanted = requested_.load();
+            const double riseStep = current_ == static_cast<int>(Music::Hymn)
+                ? 1.0 / (8.0 * kSampleRate) : fadeStep;
             if (wanted != current_) {
                 if (current_ >= kTrackCount) {
                     current_ = wanted;
                     position_ = 0;
+                    hymnAge_ = 0;
                     fade_ = 0.0;
                 } else if (fade_ > 0.0) {
                     fade_ = std::max(0.0, fade_ - fadeStep);
                 } else {
                     current_ = wanted;
                     position_ = 0;
+                    hymnAge_ = 0;
                 }
             } else if (current_ >= 0 && current_ < kTrackCount &&
                        fade_ < 1.0) {
-                fade_ = std::min(1.0, fade_ + fadeStep);
+                fade_ = std::min(1.0, fade_ + riseStep);
             }
 
             if (muteGain_ < muteTarget) {
@@ -318,11 +387,30 @@ private:
             if (current_ >= 0 && current_ < kTrackCount) {
                 Clip& clip = tracks_[current_];
                 if (!clip.samples.empty()) {
-                    value = clip.samples[position_];
-                    ++position_;
+                    const auto index = static_cast<std::size_t>(position_);
+                    const double fraction = position_ - index;
+                    value = clip.samples[index] * (1.0 - fraction) +
+                        clip.samples[(index + 1) % clip.samples.size()] * fraction;
+                    if (current_ == static_cast<int>(Music::Hymn)) {
+                        // A gradual two-octave ascent, saturation and cathedral
+                        // echoes. All treatment operates on the credited CC0 hymn.
+                        const auto echo = [&](std::size_t delay) {
+                            return clip.samples[(index + clip.samples.size() -
+                                delay % clip.samples.size()) % clip.samples.size()];
+                        };
+                        value += .30 * echo(5191) + .18 * echo(10463);
+                        value = std::tanh(value / 32768.0 * 4.5) * 24000;
+                        position_ += .22 + .83 * std::min(1.0, hymnAge_ / 16.0);
+                        hymnAge_ += 1.0 / kSampleRate;
+                    } else if (current_ == static_cast<int>(Music::SchoolHorror)) {
+                        // The same CC0 composition drifts out of tune during panic.
+                        position_ += .64 + .025 * std::sin(hymnAge_ * 5.0);
+                        hymnAge_ += 1.0 / kSampleRate;
+                        value *= .45;
+                    } else position_ += 1.0;
                     if (position_ >= clip.samples.size()) {
                         if (clip.loop) {
-                            position_ = 0;
+                            position_ = std::fmod(position_, static_cast<double>(clip.samples.size()));
                         } else {
                             // The intro ends; fall into the menu loop.
                             requested_.store(
@@ -334,8 +422,14 @@ private:
                     }
                 }
             }
-            const double gain = kMasterGain * fade_ * muteGain_;
-            const long mixed = std::lround(value * gain);
+            double effectValue=0;
+            for(auto& voice:voices_)if(voice.kind>=0){
+                if(voice.kind>=8 && snakeVoicePaused_.load()) continue;
+                const auto& clip=effects_[voice.kind].samples;
+                if(voice.position<clip.size()) effectValue+=clip[voice.position++]*(voice.kind==4?.34:.6);
+                else voice.kind=-1;
+            }
+            const long mixed = std::lround((value*kMasterGain*fade_+effectValue)*muteGain_);
             out = static_cast<std::int16_t>(
                 std::clamp<long>(mixed, -32768, 32767));
         }
@@ -349,12 +443,19 @@ private:
     volatile LONG running_ = 1;
 
     Clip tracks_[kTrackCount];
+    Clip effects_[kEffectCount];
+    struct Voice { int kind=-1; std::size_t position=0; };
+    Voice voices_[8];
+    unsigned nextVoice_=0;
+    std::atomic<unsigned> pendingEffects_{0};
+    std::atomic<bool> snakeVoicePaused_{false}, cancelSnakeVoice_{false};
     std::vector<std::int16_t> samples_[kBuffers];
     WAVEHDR headers_[kBuffers]{};
     bool prepared_[kBuffers]{};
 
     int current_ = kTrackCount;
-    std::size_t position_ = 0;
+    double position_ = 0;
+    double hymnAge_ = 0;
     double fade_ = 0.0;
     double muteGain_ = 1.0;
     std::atomic<int> requested_{static_cast<int>(Music::None)};
