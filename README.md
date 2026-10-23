@@ -10,7 +10,8 @@ nothing is written to disk.
 
 ## Screenshots
 
-The desktop, captured directly from the app at 1080 x 740:
+The desktop, captured directly from the app at 1080 x 740 with no apps open.
+The app captures show each program inside its own window:
 
 ![Anaise desktop with ring wallpaper, app icons and no open apps](docs/screenshots/menu.png)
 
@@ -21,8 +22,9 @@ The desktop, captured directly from the app at 1080 x 740:
 | ![Painter monochrome canvas and brush controls](docs/screenshots/paint.png) | ![Veil browser opening Welcome to the Game](docs/screenshots/browser.png) |
 
 These are offscreen captures at virtual time `4200` ms. To regenerate them,
-render into `build/readme`, then losslessly compress the PNGs into
-`docs/screenshots`:
+render into `build/readme`, then re-encode the PNGs losslessly into
+`docs/screenshots`; the renderer writes uncompressed files, so the checked-in
+copies are re-encoded only to keep the repository small:
 
 ```bat
 powershell -ExecutionPolicy Bypass -File tools\headless.ps1 -Screen all -OutDir build\readme
@@ -209,21 +211,24 @@ The desktop starts with no apps open. Its larger dithered case pattern reaches
 all four edges and stays anchored when the native window is resized. The ring
 wallpaper also keeps its position and scale as resizing reveals more of it.
 
-Click a desktop icon or use Up/Down and Enter to launch an app. Drag an icon
-to arrange it anywhere on the desktop; dropping it does not launch the app.
-Positions last for the current session and stay inside the desktop on resize.
-Each app opens inside its own window. Drag its title bar to move it, use the
-three title buttons to minimize, maximize/restore or close it, and click its
-taskbar tab to switch to it or restore it. Clicking the active tab minimizes
-that app. Minimized apps keep their canvas, room and browser state. Closing an
-app removes its tab; closing an in-game window leaves the machine running.
-`Esc` minimizes the focused app. Shutdown or the native close button exits.
+Click a desktop icon, or use Up/Down and Enter (or Space), to launch an app.
+Drag an icon to arrange it anywhere on the desktop; dropping it does not launch
+the app. Positions last for the current session and stay inside the desktop on
+resize. Each app opens inside its own window. Click a window to bring it
+forward, drag its title bar to move it, use the three title buttons to
+minimize, maximize/restore or close it, and click its taskbar tab to switch to
+it or restore it. Clicking the active tab minimizes that app. Minimized apps
+keep their canvas, room and browser state. Closing an app removes its tab;
+closing an in-game window leaves the machine running. `Esc` minimizes the
+focused app, and clicking the desktop returns focus to it. The Quit icon or
+the native close button exits.
 
 The desktop has no top menu bar or border lettering. The small logo button
-opens the app menu. The clock and clickable volume icon sit at the bottom
-right; click the speaker or press `M` to mute. Painter has a staggered, etched
-Hebrew wallpaper spelling "dissolve and solidify" around its black canvas.
-Keyboard instructions are kept out of the in-game interface.
+opens the app menu, which lists the three apps and Quit. The clock and
+clickable volume icon sit at the bottom right; click the speaker or press `M`
+to mute. Painter has a staggered, etched Hebrew wallpaper spelling "dissolve
+and solidify" around its black canvas. Keyboard instructions are kept out of
+the in-game interface.
 
 ## Music
 
@@ -242,7 +247,7 @@ were seam-edited before conversion so they do not click.
 All three are CC0 1.0 Universal (public domain dedication), so no credit is
 required; the table and `assets/audio/CREDITS.txt` record the provenance
 anyway. Audio is optional: if no output device can be opened the app runs
-silently. Click the signal bars in the taskbar, or press `M`, to mute or
+silently. Click the volume icon at the lower right, or press `M`, to mute or
 unmute.
 
 ## Bethelament
@@ -268,6 +273,15 @@ and settles to a faint shimmer at rest. Sampling keeps a pixel-sized footprint, 
 the room's one-pixel rug and shelf lines bend instead of breaking into dashes,
 and the output is still nothing but black and white.
 
+## Painter
+
+Painter is a 32 x 32 monochrome canvas. The number keys `1`-`3` and the mouse
+wheel choose a square brush from one to three cells. The left button draws and
+the right button erases; `Ctrl+Z` undoes, and `Ctrl+Y` or `Ctrl+Shift+Z` redoes.
+`C` clears the canvas. An opaque black square keeps the drawing separate from
+the dithered, etched Hebrew wallpaper that tiles around it and spells "dissolve
+and solidify".
+
 ## Veil
 
 Veil is a browser that outlived the network it was built for. Fifteen addresses
@@ -276,9 +290,11 @@ opened: a welcome page, a shrine, an order, a guestbook that should not exist,
 and the rest of the crawl.
 
 The chrome is a tab strip, back and forward arrows, a reload plate, an address
-bar and one link per page. Arrow keys and the mouse wheel turn the tabs, `Tab`
-and the link plate follow the page's link, `1`-`9` and `0` jump to a tab,
-`Home` and `End` go to the first and last page, `R` reloads, and `Esc` minimizes the browser.
+bar and one link per page. `Left`/`A` (or `Backspace`) goes back a page, while
+`Right`/`D` follows the current page's link, as do `Enter`, `Space`, `Tab` and
+the link plate. The mouse wheel steps through the crawl. `1`-`9` and `0` open
+the first ten tabs, `Home` and `End` go to the first and last page, `R`
+reloads, and `Esc` minimizes the browser.
 Every page spends a moment contacting its host behind a dithered progress bar
 before it paints, and the reload plate repeats that wait. Hovering a control
 draws a hand cursor and inverts the plate.
@@ -322,8 +338,11 @@ powershell -ExecutionPolicy Bypass -File tools\test.ps1
 ```
 
 The test script builds the app, renders every screen offscreen, and checks the
-captures: size, palette, determinism, the splash reveal, and argument handling.
-It prints one line per check and exits non-zero if anything fails.
+captures: size, palette, determinism, the splash reveal, a frozen Bethelament
+step and a Veil page, plus argument handling. It also parses the embedded
+audio and exercises the desktop window lifecycle offscreen. It prints one line
+per check and exits non-zero if anything fails; add `-NoBuild` to skip the
+build.
 
 To just save some screens while working:
 
