@@ -2,8 +2,8 @@
 
 A small black-and-white game library in a native Windows window. Anaise opens
 on a dot-art seraphim startup screen, then a monochrome computer desktop with
-four apps to open: Bethelament, a Painter canvas, Veil (a browser that only
-reaches dead cult pages), and Snake.
+five apps to open: Bethelament, a Painter canvas, Veil (a browser that only
+reaches dead cult pages), Snake and Tentacle.
 
 The palette is strictly black and white, the logo is 10x10 pixel art, and
 nothing is written to disk.
@@ -550,3 +550,40 @@ Offscreen: `--screen snake`, `--snake-view 1` previews a hit reaction;
 next person, and 4000 shows the next level. CC0 sound sources and edits are in
 `assets/audio/CREDITS.txt`; `tools/prepare_snake_audio.py` rebuilds the clips.
 `--headless --check-snake` checks movement, scoring, collisions and shell routing.
+
+## Tentacle
+
+Open TENTACLE on the desktop or Start menu. A great mouth sits at the end of a
+walled maze and lasers whatever reaches it. Blobs pour out of the holes on the
+left and, from wave 6, out of two flanking holes mid-maze. They share one flow
+field towards the mouth and steer smoothly round every corner, so a corridor
+fills like a river. Each species is drawn procedurally and behaves differently:
+
+- **Mites** are small arrowheads that dart in bursts and weave.
+- **Puddles** pack tightly, and two puddles that touch run together into a bigger, slower one.
+- **Splitters** burst into three mites when they die.
+- **Shells** are armoured hexagons that take less laser damage and shove the crowd aside.
+- **Jellies** trail tentacles and make everything near them faster and self-healing.
+- **Brutes** arrive every fifth wave: huge, many-eyed and they bite hard.
+
+Grow defenders with 1-4 (or the bottom bar): the **Biter** (a cheap, steady
+short beam), the **Stalk** (an eye whose long beam pierces six in a line), the
+**Maw** (a blocker that bites everything around it) and the **Digester** (no
+teeth, passive biomass). Drag a box to select, then right-click to move; units
+path round walls, block the flow, and get chewed if the swarm reaches them.
+Walls block beams.
+
+The economy runs on biomass: kills pay by species, digesters trickle it in,
+every cleared wave pays a bonus plus 5% interest (up to 120), and Space calls
+the next wave early for extra biomass. Spend it on E (evolve the selected
+mouths, up to level 5), U (grow the great mouth: more range, more damage, a
+second beam at level 3 and a third at 5), C (colony: +12% damage and +10% kill
+reward for everything), H (repair) and Q (a free pulse that bursts everything
+near the mouth, 40 s cooldown). There are 25 waves that grow to thousands of
+blobs, then endless mode. P pauses and R restarts after a loss.
+
+The seven sound effects are original synthesised CC0 clips; you can rebuild
+them with `tools/make_tentacle_sfx.py`. Offscreen: `--screen tentacle` renders a
+deterministic wave-18 battle. `--headless --check-tentacle` checks map
+reachability, unit pathing, evolution, a full first wave, splitting, puddle
+merging, a 3000-blob swarm against the walls, defeat and desktop routing.

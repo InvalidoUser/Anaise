@@ -104,7 +104,7 @@ function Render-Screens {
 }
 
 $expectedWidth, $expectedHeight = $Size -split 'x' | ForEach-Object { [int]$_ }
-$screenNames = @('splash', 'menu', 'library', 'paint', 'browser', 'snake', 'gods-ritual', 'gods-arena', 'gods-tower')
+$screenNames = @('splash', 'menu', 'library', 'paint', 'browser', 'snake', 'tentacle', 'gods-ritual', 'gods-arena', 'gods-tower')
 
 if (-not $NoBuild) {
     & cmd /c (Join-Path $root 'build.bat')
@@ -178,6 +178,10 @@ Check 'Snake cinematic is deterministic' ($exitCode -eq 0 -and [AnaiseShot]::Sha
 
 $exitCode = Invoke-Render @('--headless', '--check-snake')
 Check 'Snake scoring, collisions, cinematic freeze, voice timing, next-person progression and desktop routing' ($exitCode -eq 0)
+$exitCode = Invoke-Render @('--headless', '--check-tentacle')
+Check 'Tentacle flow field, unit pathing, economy, splitters, puddle merging, 3000-blob swarm, defeat and desktop routing' ($exitCode -eq 0)
+$tentacleProbe = [AnaiseShot]::Inspect((Join-Path $root "$first\tentacle.png"))
+Check 'Tentacle battle renders in black and white' ($tentacleProbe.Grey -eq 0 -and $tentacleProbe.Colour -eq 0 -and $tentacleProbe.White -gt 1000)
 $snakeProbe = [AnaiseShot]::Inspect((Join-Path $root "$first\snake.png"))
 Check 'Snake palette is strictly binary' ($snakeProbe.Grey -eq 0 -and $snakeProbe.Colour -eq 0)
 

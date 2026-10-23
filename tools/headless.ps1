@@ -5,7 +5,7 @@
 #
 # No window is created, so this never flashes on the desktop or steals focus.
 param(
-    [ValidateSet('splash', 'menu', 'library', 'paint', 'browser', 'crash', 'search', 'corridor', 'gods-ritual', 'gods-arena', 'gods-tower', 'snake', 'all')]
+    [ValidateSet('splash', 'menu', 'library', 'paint', 'browser', 'crash', 'search', 'corridor', 'gods-ritual', 'gods-arena', 'gods-tower', 'snake', 'tentacle', 'all')]
     [string]$Screen = 'all',
     [string]$Size = '1080x740',
     [int]$TimeMs = 4200,

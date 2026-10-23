@@ -172,6 +172,8 @@ public:
     void snakeGroan(int person) {
         if (open_ && person>=0 && person<3) pendingEffects_.fetch_or(1u << (8+person));
     }
+    // Tentacle's seven cues live in effect slots 11-17.
+    void tentacle(unsigned mask) { if (open_) pendingEffects_.fetch_or((mask & 127u) << 11); }
     void pauseSnakeVoice(bool paused) { snakeVoicePaused_.store(paused); }
     void stopSnakeVoice() { cancelSnakeVoice_.store(true); }
 
@@ -201,7 +203,7 @@ public:
         probe.effects_[0]=loadClip(instance,211);probe.pendingEffects_.store(1);
         probe.fillBuffer(block);
         if(std::all_of(block.begin(),block.end(),[](auto sample){return sample==0;}))return false;
-        for(int i=8;i<kEffectCount;++i) {
+        for(int i=8;i<11;++i) {
             for(auto& voice:probe.voices_) voice.kind=-1;
             probe.effects_[i]=loadClip(instance,211+i);
             probe.pendingEffects_.store(1u<<i);
@@ -222,7 +224,7 @@ public:
 
 private:
     static constexpr int kTrackCount = 6;
-    static constexpr int kEffectCount = 11;
+    static constexpr int kEffectCount = 18;
     static constexpr int kSampleRate = 22050;
     static constexpr int kBuffers = 4;
     // Four 25 ms buffers keep combat and reveal effects responsive.
@@ -345,12 +347,12 @@ private:
 
     void fillBuffer(std::vector<std::int16_t>& buffer) {
         if(cancelSnakeVoice_.exchange(false)) {
-            for(auto& voice:voices_) if(voice.kind>=8) voice.kind=-1;
-            pendingEffects_.fetch_and(255u);
+            for(auto& voice:voices_) if(voice.kind>=8 && voice.kind<=10) voice.kind=-1;
+            pendingEffects_.fetch_and(~(7u<<8));
         }
         const unsigned pending=pendingEffects_.exchange(0);
         for(int i=0;i<kEffectCount;++i) if(pending&(1u<<i)) {
-            Voice& voice=voices_[nextVoice_++ % 8];voice.kind=i;voice.position=0;
+            Voice& voice=voices_[nextVoice_++ % kVoices];voice.kind=i;voice.position=0;
         }
         const double fadeStep = 1.0 / (kFadeSeconds * kSampleRate);
         const double muteStep = 1.0 / (kMuteSeconds * kSampleRate);
@@ -424,9 +426,9 @@ private:
             }
             double effectValue=0;
             for(auto& voice:voices_)if(voice.kind>=0){
-                if(voice.kind>=8 && snakeVoicePaused_.load()) continue;
+                if(voice.kind>=8 && voice.kind<=10 && snakeVoicePaused_.load()) continue;
                 const auto& clip=effects_[voice.kind].samples;
-                if(voice.position<clip.size()) effectValue+=clip[voice.position++]*(voice.kind==4?.34:.6);
+                if(voice.position<clip.size()) effectValue+=clip[voice.position++]*(voice.kind==4?.34:voice.kind>=11?.45:.6);
                 else voice.kind=-1;
             }
             const long mixed = std::lround((value*kMasterGain*fade_+effectValue)*muteGain_);
@@ -445,7 +447,8 @@ private:
     Clip tracks_[kTrackCount];
     Clip effects_[kEffectCount];
     struct Voice { int kind=-1; std::size_t position=0; };
-    Voice voices_[8];
+    static constexpr int kVoices = 12;
+    Voice voices_[kVoices];
     unsigned nextVoice_=0;
     std::atomic<unsigned> pendingEffects_{0};
     std::atomic<bool> snakeVoicePaused_{false}, cancelSnakeVoice_{false};

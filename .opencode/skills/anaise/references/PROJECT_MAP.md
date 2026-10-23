@@ -122,12 +122,24 @@ no emotion labels or club suffixes in character name tags. School views 3/4
 capture panic and aftermath. Resources 205 and 217-218 supply CC0 Cate music
 and two acted screams; source records are in assets/audio/CREDITS.txt.
 
+## Tentacle
+
+`src/tentacle.h` owns the swarm tower defence: a 64x40 walled map, a Dijkstra flow
+field to the mouth with bilinear steering, a per-cell spatial hash for separation,
+six blob species (mite, puddle, splitter, shell, jelly, brute), four unit types with
+per-unit path fields, the biomass economy and 25 waves. It renders platform-neutral
+into a 32-bit buffer (own 5x7 pixel font) and blits with SetDIBitsToDevice, so the
+output is strictly binary. Desktop index 4; `tentaclePoint` maps drags that leave
+the window. Sounds are effect slots 11-17 (resources 222-228) via `Audio::tentacle`;
+snake voice pause/cancel only touches slots 8-10. `--screen tentacle` renders
+`preview()`, `--check-tentacle` runs `Tentacle::selfTest()` plus desktop routing.
+
 ## Snake
 
 `src/snake.h` owns the session-only 26x18 drill-snake game, deterministic target
 placement, turn queue, scoring/speed, collisions, pause, and face reactions.
-Desktop app index 3 is Snake; index 4 is Shutdown. App state arrays and taskbar
-loops use `kAppCount` (4), while icon/start-menu loops use `kMenuItems` (5).
+Desktop app index 3 is Snake, index 4 is Tentacle and index 5 is Shutdown. App state arrays and taskbar
+loops use `kAppCount` (5), while icon/start-menu loops use `kMenuItems` (6).
 `assets/snake/` contains three Met Open Access CC0 portraits, source metadata,
 credits and imported luminance BMPs (resources 501-503).
 `tools/make_snake_faces.py` rebuilds crops offline. Runtime dithering plus a

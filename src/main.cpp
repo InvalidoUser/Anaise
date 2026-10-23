@@ -29,6 +29,7 @@
 #include "school_horror.h"
 #include "new_gods.h"
 #include "snake.h"
+#include "tentacle.h"
 #include "occult_art.h"
 #include "ring_pattern.h"
 
@@ -587,6 +588,7 @@ enum class Screen {
     GodsArena,
     GodsTower,
     Snake,
+    Tentacle,
 };
 
 const wchar_t* screenName(Screen screen) {
@@ -603,6 +605,7 @@ const wchar_t* screenName(Screen screen) {
         case Screen::GodsArena: return L"gods-arena";
         case Screen::GodsTower: return L"gods-tower";
         case Screen::Snake: return L"snake";
+        case Screen::Tentacle: return L"tentacle";
     }
     return L"screen";
 }
@@ -773,6 +776,7 @@ struct HeadlessOptions {
     bool checkGame = false;
     bool checkGods = false;
     bool checkSnake = false;
+    bool checkTentacle = false;
     int snakeView = 0;
     int godsView = 0;
     int schoolView = 0;  // Explore, conversation, or festival ending.
@@ -844,6 +848,7 @@ bool parseHeadlessOptions(const wchar_t* commandLine, HeadlessOptions& options) 
             else if (value == L"gods-arena") options.screen = Screen::GodsArena;
             else if (value == L"gods-tower") options.screen = Screen::GodsTower;
             else if (value == L"snake") options.screen = Screen::Snake;
+            else if (value == L"tentacle") options.screen = Screen::Tentacle;
             else if (!options.allScreens) return false;
             continue;
         }
@@ -942,6 +947,7 @@ bool parseHeadlessOptions(const wchar_t* commandLine, HeadlessOptions& options) 
             options.snakeView=int(value); continue;
         }
         if (arg == L"--check-snake") { options.checkSnake = true; continue; }
+        if (arg == L"--check-tentacle") { options.checkTentacle = true; continue; }
         if (arg == L"--check-gods") {
             options.checkGods = true;
             continue;
@@ -1090,14 +1096,16 @@ public:
         if (!headless_) return false;
         gods_.quit();
         appWindows_ = {};
-        windowOrder_ = {0, 1, 2, 3};
+        windowOrder_ = {0, 1, 2, 3, 4};
         snake_.reset();
+        tentacle_.reset();
         phase_ = GamePhase::Play;
         screen_ = Screen::Menu;
         if (screen == Screen::Splash) screen_ = screen;
         else if (screen != Screen::Menu) openScreen(screen);
         headlessNowMs_ = timeMs;
         if (screen == Screen::Snake && snakeView) snake_.preview(timeMs);
+        if (screen == Screen::Tentacle) tentacle_.preview(timeMs);
         if (screen == Screen::GodsRitual || screen == Screen::GodsArena || screen == Screen::GodsTower) {
             screen_ = Screen::Menu;
             gods_.preview(screen == Screen::GodsRitual ? anaise::NewGods::Stage::Revelation :
@@ -1222,6 +1230,22 @@ public:
         if (menuHitAt((chip.left+chip.right)/2,(chip.top+chip.bottom)/2).index != 3) return false;
         dismissApp(true);
         return !appWindows_[3].open;
+    }
+
+    bool checkTentacleInteractions() {
+        if (!headless_) return false;
+        menuIndex_ = 4; activateMenuItem();
+        if (screen_ != Screen::Tentacle || !appWindows_[4].open || activeApp() != 4) return false;
+        handleKey(VK_SPACE);
+        if (tentacle_.title()) return false;
+        handleKey('1');
+        dismissApp(false);
+        if (!appWindows_[4].minimized) return false;
+        focusApp(4);
+        const RECT chip = menuLayout(headlessWidth_, headlessHeight_).taskChip[4];
+        if (menuHitAt((chip.left + chip.right) / 2, (chip.top + chip.bottom) / 2).index != 4) return false;
+        dismissApp(true);
+        return !appWindows_[4].open;
     }
 
     bool checkGodsInteractions() {
@@ -1580,7 +1604,7 @@ public:
     }
 
 private:
-    static constexpr int kAppCount = 4;
+    static constexpr int kAppCount = 5;
     static constexpr int kMenuItems = kAppCount + 1;
     static constexpr int kBrowserPages = kVeilPageCount;
     static constexpr int kBrowserHitBack = kBrowserPages;
@@ -1592,6 +1616,7 @@ private:
         L"PAINTER",
         L"VEIL",
         L"SNAKE",
+        L"TENTACLE",
         L"QUIT",
     };
 
@@ -1602,6 +1627,7 @@ private:
         L"PAINTER.EXE",
         L"VEIL.EXE",
         L"SNAKE.EXE",
+        L"TENTACLE.EXE",
         L"SHUTDOWN.EXE",
     };
     // Veil reaches fifteen addresses. None of them resolve outside this file.
@@ -1839,6 +1865,12 @@ private:
             L"..########..##..", L"........##..##..", L"........##..##..", L"........######..",
             L".........####...", L"..........##....", L"................", L"................",
         };
+        static const wchar_t* const kTentacle[16] = {
+            L"................", L".....######.....", L"....#......#....", L"...#.#....#.#...",
+            L"...#........#...", L"...#.######.#...", L"...#.#.##.#.#...", L"....#......#....",
+            L".....######.....", L"....#.#..#.#....", L"...#..#..#..#...", L"..#..#....#..#..",
+            L"..#..#....#..#..", L".#..#......#..#.", L".#..#......#..#.", L"................",
+        };
         static const wchar_t* const kShutdown[16] = {
             L"................",
             L".......##.......",
@@ -1862,6 +1894,7 @@ private:
             case 1: return kPainter;
             case 2: return kVeil;
             case 3: return kSnake;
+            case 4: return kTentacle;
             default: return kShutdown;
         }
     }
@@ -1934,11 +1967,13 @@ private:
 
     static Screen appScreen(int index) {
         return index == 0 ? Screen::Library :
-               index == 1 ? Screen::Paint : index == 2 ? Screen::Browser : Screen::Snake;
+               index == 1 ? Screen::Paint : index == 2 ? Screen::Browser :
+               index == 3 ? Screen::Snake : Screen::Tentacle;
     }
 
     int activeApp() const {
         if (screen_ == Screen::Snake) return 3;
+        if (screen_ == Screen::Tentacle) return 4;
         if (screen_ == Screen::Paint) return 1;
         if (screen_ == Screen::Browser) return 2;
         if (screen_ == Screen::Library || screen_ == Screen::Crash ||
@@ -1995,6 +2030,15 @@ private:
         x = MulDiv(x - body.left, client.right, body.right - body.left);
         y = MulDiv(y - body.top, client.bottom, body.bottom - body.top);
         return true;
+    }
+
+    // Window to content coordinates without the inside test, for drags that
+    // leave the Tentacle window while a selection box is open.
+    void tentaclePoint(int& x, int& y) const {
+        RECT body = appWindowLayout(4).windowBody;
+        RECT client = contentClient(4);
+        x = MulDiv(x - body.left, client.right, std::max<LONG>(1, body.right - body.left));
+        y = MulDiv(y - body.top, client.bottom, std::max<LONG>(1, body.bottom - body.top));
     }
 
     void focusApp(int index) {
@@ -2254,6 +2298,7 @@ private:
                     if (screen_ == Screen::Splash ||
                         screen_ == Screen::Library || screen_ == Screen::Paint ||
                         screen_ == Screen::Browser || screen_ == Screen::Snake ||
+                        screen_ == Screen::Tentacle ||
                         screen_ == Screen::Crash || screen_ == Screen::Search ||
                         screen_ == Screen::Corridor) {
                         if (screen_ == Screen::Splash) {
@@ -2276,7 +2321,7 @@ private:
                         return 0;
                     }
                 }
-                if (screen_ == Screen::Snake && (lParam & (1 << 30))) return 0;
+                if ((screen_ == Screen::Snake || screen_ == Screen::Tentacle) && (lParam & (1 << 30))) return 0;
                 handleKey(static_cast<int>(wParam));
                 return 0;
 
@@ -2345,6 +2390,13 @@ private:
         const int groan = snake_.takeGroan();
         if (groan >= 0) audio_.snakeGroan(groan);
         if (screen_ == Screen::Snake) audio_.play(snake_.cinematic() ? anaise::Music::None : anaise::Music::Menu);
+        const bool tentacleFocused = screen_ == Screen::Tentacle && !gods_.active() &&
+                                     !IsIconic(hwnd_) && GetForegroundWindow() == hwnd_;
+        tentacle_.update(nowMs(), tentacleFocused);
+        if (screen_ == Screen::Tentacle) {
+            audio_.tentacle(tentacle_.takeSounds());
+            audio_.play(tentacle_.fighting() ? anaise::Music::Room : anaise::Music::Menu);
+        }
         if (IsIconic(hwnd_)) return;
         if (gods_.active()) {
             auto held = [](int key) { return (GetAsyncKeyState(key) & 0x8000) != 0; };
@@ -2385,6 +2437,7 @@ private:
     void openScreen(Screen screen) {
         const int index = screen == Screen::Paint ? 1
                           : screen == Screen::Snake ? 3
+                          : screen == Screen::Tentacle ? 4
                           : screen == Screen::Browser ? 2
                                                       : 0;
         const bool newlyOpened = !appWindows_[index].open;
@@ -2417,6 +2470,8 @@ private:
             if (newlyOpened) { audio_.stopSnakeVoice(); snake_.reset(); }
         }
         if (screen != Screen::Snake) snake_.update(nowMs(), false);
+        if (screen == Screen::Tentacle && newlyOpened) tentacle_.reset();
+        if (screen != Screen::Tentacle) tentacle_.mouseUp();
         screen_ = screen;
         if (hwnd_) {
             switch (screen) {
@@ -2425,6 +2480,9 @@ private:
                     break;
                 case Screen::Snake:
                     SetWindowTextW(hwnd_, L"Anaise - Snake");
+                    break;
+                case Screen::Tentacle:
+                    SetWindowTextW(hwnd_, L"Anaise - Tentacle");
                     break;
                 case Screen::Paint:
                     SetWindowTextW(hwnd_, L"Anaise - Painter");
@@ -2473,6 +2531,9 @@ private:
                 break;
             case 3:
                 focusApp(3);
+                break;
+            case 4:
+                focusApp(4);
                 break;
             default:
                 DestroyWindow(hwnd_);
@@ -2664,6 +2725,11 @@ private:
                 activateMenuItem();
             }
             return;
+        }
+        if (screen_ == Screen::Tentacle) {
+            tentacle_.key(key);
+            audio_.tentacle(tentacle_.takeSounds());
+            invalidate(); return;
         }
         if (screen_ == Screen::Snake) {
             snake_.key(key);
@@ -3105,6 +3171,13 @@ private:
             invalidate();
             return;
         }
+        if (screen_ == Screen::Tentacle && tentacle_.dragging()) {
+            int cx = x, cy = y;
+            tentaclePoint(cx, cy);
+            tentacle_.mouseMove(cx, cy);
+            invalidate();
+            return;
+        }
         const MenuHit shellHit = menuHitAt(x, y);
         if (!painting_ && (screen_ == Screen::Menu || shellHit.part != MenuPart::None)) {
             const MenuHit hit = shellHit;
@@ -3130,6 +3203,10 @@ private:
                 browserHover_ = -1;
                 invalidate();
             }
+            return;
+        }
+        if (screen_ == Screen::Tentacle) {
+            tentacle_.mouseMove(x, y);
             return;
         }
         if (screen_ == Screen::Browser) {
@@ -3270,6 +3347,13 @@ private:
             enterMenu();
             return;
         }
+        if (screen_ == Screen::Tentacle) {
+            tentacle_.mouseDown(x, y, leftButton);
+            audio_.tentacle(tentacle_.takeSounds());
+            if (leftButton && tentacle_.dragging() && hwnd_) SetCapture(hwnd_);
+            invalidate();
+            return;
+        }
         if (screen_ == Screen::Browser) {
             if (!leftButton) return;
             const int hit = browserHitAt(x, y);
@@ -3311,6 +3395,7 @@ private:
 
     void onMouseUp() {
         godsMouseGuard_ = false;
+        if (screen_ == Screen::Tentacle) tentacle_.mouseUp();
         const int clickedIcon = !iconDragged_ ? pressedIcon_ : -1;
         pressedIcon_ = -1;
         iconDragged_ = false;
@@ -3394,8 +3479,10 @@ private:
         const int hitHeight = tile + px(4) + labelHeight;
         const RECT& desk = layout.desktop;
         for (int i = 0; i < kMenuItems; ++i) {
-            const int desiredX = iconPlaced_[i] ? px(iconPositions_[i].x) : px(12);
-            const int desiredY = iconPlaced_[i] ? px(iconPositions_[i].y) : px(12 + i * 90);
+            // Default icons stack down the left and wrap into a new column.
+            const int perColumn = std::max(1, (MulDiv(int(desk.bottom - desk.top), 96, dpi_) - 12) / 90);
+            const int desiredX = iconPlaced_[i] ? px(iconPositions_[i].x) : px(12 + (i / perColumn) * 110);
+            const int desiredY = iconPlaced_[i] ? px(iconPositions_[i].y) : px(12 + (i % perColumn) * 90);
             const int left = desk.left + std::clamp(desiredX, 0,
                 std::max(0, int(desk.right - desk.left) - hitWidth));
             const int top = desk.top + std::clamp(desiredY, 0,
@@ -4166,7 +4253,8 @@ private:
         if (index == 0) paintLibrary(content, client.right, client.bottom);
         else if (index == 1) paintPaintScreen(content, client.right, client.bottom);
         else if (index == 2) paintBrowser(content, client.right, client.bottom);
-        else snake_.draw(content, client.right, client.bottom, nowMs());
+        else if (index == 3) snake_.draw(content, client.right, client.bottom, nowMs());
+        else tentacle_.draw(content, client.right, client.bottom, nowMs());
         const RECT body = layout.windowBody;
         SetStretchBltMode(dc, COLORONCOLOR);
         StretchBlt(dc, body.left, body.top, body.right - body.left, body.bottom - body.top,
@@ -7996,6 +8084,7 @@ private:
     HFONT dedicationFont_ = nullptr;
     anaise::NewGods gods_;
     anaise::Snake snake_;
+    anaise::Tentacle tentacle_;
     bool godsMouseGuard_ = false;
     UINT fontsDpi_ = 0;
 
@@ -8025,7 +8114,7 @@ private:
     bool startMenuVisible_ = false;
     bool backgroundHidden_ = false;
     std::array<AppWindow, kAppCount> appWindows_{};
-    std::array<int, kAppCount> windowOrder_{{0, 1, 2, 3}};
+    std::array<int, kAppCount> windowOrder_{{0, 1, 2, 3, 4}};
     std::array<POINT, kMenuItems> iconPositions_{};
     std::array<bool, kMenuItems> iconPlaced_{};
     int pressedIcon_ = -1;
@@ -8135,6 +8224,7 @@ int runHeadless(HINSTANCE instance, const HeadlessOptions& options) {
     if (options.checkBrowser) return app.checkBrowserInteractions() ? 0 : 1;
     if (options.checkGame) return app.checkGameInteractions() ? 0 : 1;
     if (options.checkSnake) return anaise::Snake::selfTest() && app.checkSnakeInteractions() ? 0 : 1;
+    if (options.checkTentacle) return anaise::Tentacle::selfTest() && app.checkTentacleInteractions() ? 0 : 1;
     if (options.checkGods) return anaise::NewGods::selfTest() && app.checkGodsInteractions() ? 0 : 1;
     if (!ensureDirectory(options.outDir)) return 1;
 
@@ -8142,7 +8232,8 @@ int runHeadless(HINSTANCE instance, const HeadlessOptions& options) {
                                       Screen::Library, Screen::Paint,
                                       Screen::Browser, Screen::Crash,
                                       Screen::Search, Screen::Corridor,
-                                      Screen::GodsRitual, Screen::GodsArena, Screen::GodsTower, Screen::Snake};
+                                      Screen::GodsRitual, Screen::GodsArena, Screen::GodsTower, Screen::Snake,
+                                      Screen::Tentacle};
     const int count = options.allScreens
                           ? static_cast<int>(std::size(kScreens))
                           : 1;

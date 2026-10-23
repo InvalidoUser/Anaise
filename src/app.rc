@@ -86,3 +86,12 @@ END
 219 RCDATA "assets/audio/snake-groan-1.wav"
 220 RCDATA "assets/audio/snake-groan-2.wav"
 221 RCDATA "assets/audio/snake-groan-3.wav"
+
+// Tentacle: seven original synthesised effects, CC0 (tools/make_tentacle_sfx.py).
+222 RCDATA "assets/audio/tentacle-laser.wav"
+223 RCDATA "assets/audio/tentacle-splat.wav"
+224 RCDATA "assets/audio/tentacle-buy.wav"
+225 RCDATA "assets/audio/tentacle-wave.wav"
+226 RCDATA "assets/audio/tentacle-hurt.wav"
+227 RCDATA "assets/audio/tentacle-evolve.wav"
+228 RCDATA "assets/audio/tentacle-pulse.wav"
